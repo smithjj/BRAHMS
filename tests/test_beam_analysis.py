@@ -63,11 +63,72 @@ class TestGaussian:
         assert r.z0x[0] == pytest.approx(z_expected, rel=0.02)       # past the waist
         assert r.z0y[0] == pytest.approx(-z_expected, rel=0.02)      # before it
 
+    @pytest.mark.parametrize("R", [900.0, 3000.0, -1200.0, -6000.0])
+    def test_distance_to_waist_follows_the_curvature(self, xy, R):
+        # z0 = k0² w² / (R wk²) from the same result's R, w and wk (signed: the
+        # sign of R, so z0 < 0 when the plane is before the waist) — and for a
+        # Gaussian the same distance follows from w, w0 and the Rayleigh range
+        w = 40.0
+        r = ba.analyze_slices(gauss(*xy, w, w, R, R), *xy, K0)
+        assert r.z0x[0] == pytest.approx(K0 ** 2 * r.wx[0] ** 2 / (r.Rx[0] * r.wkx[0] ** 2), rel=1e-9)
+        assert np.sign(r.z0x[0]) == np.sign(R)
+        w0 = waist(w, R)
+        assert abs(r.z0x[0]) == pytest.approx(math.sqrt(w ** 2 / w0 ** 2 - 1) * K0 * w0 ** 2 / 2, rel=0.02)
+
+    def test_fluence_distance_to_waist_is_one_signed_value(self, xy):
+        # a pulse whose slices share the same wavefront: the fluence z0 is a
+        # single value per entry (not one per curvature-removal pass) and equals
+        # the per-slice one
+        env = np.exp(-(((np.arange(7) - 3) / 2.0) ** 2))
+        for R in (2500.0, -2500.0):
+            E = env[:, None, None] * gauss(*xy, 40, 30, R, -R)[None]
+            f = ba.analyze_fluence(E, *xy, K0)
+            s = ba.analyze_slices(E, *xy, K0)
+            assert f.z0x.shape == (1,) and f.z0y.shape == (1,)
+            assert f.z0x[0] == pytest.approx(s.z0x[3], rel=1e-6)
+            assert f.z0y[0] == pytest.approx(s.z0y[3], rel=1e-6)
+            assert np.sign(f.z0x[0]) == np.sign(R) and np.sign(f.z0y[0]) == -np.sign(R)
+            assert f.z0x[0] == pytest.approx(K0 ** 2 * f.wx[0] ** 2 / (f.Rx[0] * f.wkx[0] ** 2), rel=1e-9)
+
     def test_amplitude_and_global_phase_do_not_matter(self, xy):
         a = ba.analyze_slices(gauss(*xy, 33, 33, 4000, 4000), *xy, K0)
         b = ba.analyze_slices(7.5e-3 * np.exp(1.3j) * gauss(*xy, 33, 33, 4000, 4000), *xy, K0)
         for name in ("M2x", "wx", "Rx", "thx"):
             assert getattr(b, name)[0] == pytest.approx(getattr(a, name)[0], rel=1e-9, abs=1e-12)
+
+
+class TestAxisOrientation:
+    """x runs along the last array axis (columns), y along the middle one. A
+    transposed analysis would swap every x and y result; the MATLAB class guards
+    against this with ``Msquared_class:gridOrientation``, here every quantity is
+    made different in x and y so a swap cannot go unnoticed."""
+
+    def _beam(self, xy):
+        dk = 2 * math.pi / (N * D)
+        return gauss(*xy, 45, 22, 4000, -2500, x0=14.0, y0=-9.0, kx=7 * dk, ky=-3 * dk)
+
+    def test_x_results_belong_to_the_column_axis(self, xy):
+        dk = 2 * math.pi / (N * D)
+        r = ba.analyze_slices(self._beam(xy), *xy, K0)
+        assert (r.wx[0], r.wy[0]) == pytest.approx((45, 22), rel=2e-3)
+        assert (r.Rx[0], r.Ry[0]) == pytest.approx((4000, -2500), rel=0.02)
+        assert (r.xbar[0], r.ybar[0]) == pytest.approx((14, -9), rel=2e-3)
+        assert (r.kxbar[0], r.kybar[0]) == pytest.approx((7 * dk, -3 * dk), rel=2e-3)
+        assert r.z0x[0] > 0 > r.z0y[0]
+
+    def test_transposing_the_field_swaps_x_and_y(self, xy):
+        E = self._beam(xy)
+        a = ba.analyze_slices(E, *xy, K0)
+        b = ba.analyze_slices(E.T, *xy, K0)
+        for x_name, y_name in (("wx", "wy"), ("Rx", "Ry"), ("xbar", "ybar"), ("kxbar", "kybar"),
+                               ("z0x", "z0y"), ("thx", "thy"), ("M2x", "M2y")):
+            assert getattr(b, x_name)[0] == pytest.approx(getattr(a, y_name)[0], rel=1e-9, abs=1e-12)
+            assert getattr(b, y_name)[0] == pytest.approx(getattr(a, x_name)[0], rel=1e-9, abs=1e-12)
+
+    def test_fluence_follows_the_same_axes(self, xy):
+        E = np.stack([self._beam(xy)] * 3)
+        f = ba.analyze_fluence(E, *xy, K0)
+        assert f.wx[0] > f.wy[0] and f.xbar[0] > 0 > f.ybar[0] and f.Rx[0] > 0 > f.Ry[0]
 
 
 class TestHermiteGauss:

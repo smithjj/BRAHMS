@@ -28,6 +28,13 @@ Conventions
 * **R > 0 is a diverging beam, R < 0 a converging one** for the engine's
   phase convention (checked against the engine's focused Gaussian in the
   tests). A positive k̄ tilts toward +x.
+* ``z0 = k0²·w²/(R·wk²)`` is the signed distance from the waist to the
+  analysed plane, using the total (harmonic-sum) R: z0 > 0 when the plane is
+  downstream of the waist (R > 0, diverging), z0 < 0 when it is before it
+  (R < 0, converging). It has the sign of R and is one value per x and y.
+* x varies along the last array axis, y along the one before it; the x and y
+  results are never interchangeable (the MATLAB class insists on the grid
+  orientation for the same reason).
 * A plane/flat-phase beam has R = ±inf (reported as ``inf``).
 """
 
@@ -75,7 +82,7 @@ class BeamResult:
     kybar: np.ndarray
     wkx: np.ndarray           # angular width [rad/μm]
     wky: np.ndarray
-    z0x: np.ndarray           # signed distance of the plane from the waist [μm]
+    z0x: np.ndarray           # signed distance from the waist to the plane [μm]; >0 downstream (R>0)
     z0y: np.ndarray
     thx: np.ndarray           # tilt kbar / k0 [rad]
     thy: np.ndarray
@@ -351,7 +358,9 @@ CSV_COLUMNS = [            # (field, header, factor from internal units)
 
 def write_csv(path: str, run: RunBeamAnalysis, mode: str = "fluence", frame: str = "crystal"):
     """Write the analysis to CSV. mode: "fluence" (one row per wave) or
-    "slices" (one row per wave and time slice). frame: "crystal" or "air"."""
+    "slices" (one row per wave and time slice). frame: "crystal" or "air".
+    ``z_from_waist`` is signed: positive when the plane is downstream of the
+    waist (R > 0), negative when it is before it."""
     if mode not in ("fluence", "slices") or frame not in ("crystal", "air"):
         raise ValueError("mode must be 'fluence' or 'slices'; frame 'crystal' or 'air'")
     with open(path, "w", newline="") as f:
