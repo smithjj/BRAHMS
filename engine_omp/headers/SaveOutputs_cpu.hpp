@@ -15,7 +15,7 @@ void save_complex_h5(const cVec_t& field, const std::string& filename) {
     using namespace H5;
     hsize_t dims[3] = { NT, NY, NX };
 
-    std::vector<float> arr_r(SIZE), arr_i(SIZE);
+    std::vector<real_t> arr_r(SIZE), arr_i(SIZE);
     for (uint32_t t = 0; t < NT; ++t)
     for (uint32_t y = 0; y < NY; ++y)
     for (uint32_t x = 0; x < NX; ++x) {
@@ -27,8 +27,8 @@ void save_complex_h5(const cVec_t& field, const std::string& filename) {
 
     H5File file(filename, H5F_ACC_TRUNC);
     DataSpace ds(3, dims);
-    file.createDataSet("real", PredType::NATIVE_FLOAT, ds).write(arr_r.data(), PredType::NATIVE_FLOAT);
-    file.createDataSet("imag", PredType::NATIVE_FLOAT, ds).write(arr_i.data(), PredType::NATIVE_FLOAT);
+    file.createDataSet("real", H5_REAL, ds).write(arr_r.data(), H5_REAL);
+    file.createDataSet("imag", H5_REAL, ds).write(arr_i.data(), H5_REAL);
     file.close();
 }
 
@@ -37,7 +37,7 @@ void save_vector_h5(const rVec_t& v, const std::string& filename) {
     hsize_t dim = v.size();
     H5File file(filename, H5F_ACC_TRUNC);
     DataSpace ds(1, &dim);
-    file.createDataSet("data", PredType::NATIVE_FLOAT, ds)
-        .write(v.data(), PredType::NATIVE_FLOAT);
+    file.createDataSet("data", H5_REAL, ds)
+        .write(v.data(), H5_REAL);
     file.close();
 }

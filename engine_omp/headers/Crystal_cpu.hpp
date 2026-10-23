@@ -57,9 +57,9 @@ struct Crystal {
         const auto& opt = cr["optics"];
         const auto& nl  = cr["nonlinear"];
 
-        Lcr = geo["Lcr_mm"].get<real_t>() * 1000.0f;   // mm → μm
-        LX  = geo["LX_mm"].get<real_t>()  * 1000.0f;  // mm → μm
-        LY  = geo["LY_mm"].get<real_t>()  * 1000.0f;  // mm → μm
+        Lcr = geo["Lcr_mm"].get<real_t>() * 1000.0_r;   // mm → μm
+        LX  = geo["LX_mm"].get<real_t>()  * 1000.0_r;  // mm → μm
+        LY  = geo["LY_mm"].get<real_t>()  * 1000.0_r;  // mm → μm
         dz  = Lcr / static_cast<real_t>(NZ);           // μm/step
         dx  = LX  / static_cast<real_t>(NX);           // μm/pixel
         dy  = LY  / static_cast<real_t>(NY);           // μm/pixel
@@ -87,70 +87,70 @@ struct Crystal {
         b2p = opt["b2p_ps2_um"].get<real_t>();
         b2s = opt["b2s_ps2_um"].get<real_t>();
         b2i = opt["b2i_ps2_um"].get<real_t>();
-        b3p = opt.value("b3p_ps3_um", 0.0f);
-        b3s = opt.value("b3s_ps3_um", 0.0f);
-        b3i = opt.value("b3i_ps3_um", 0.0f);
+        b3p = opt.value("b3p_ps3_um", 0.0_r);
+        b3s = opt.value("b3s_ps3_um", 0.0_r);
+        b3i = opt.value("b3i_ps3_um", 0.0_r);
 
         dQ        = nl["deff_pm_V"].get<real_t>();
 
         // For QPM crystals: dQ_eff = 2 * deff / π (effective modulation)
         if (cr.contains("qpm")) {
-            dQ = 2.0f * dQ / PI;
+            dQ = 2.0_r * dQ / PI;
         }
 
-        alpha_crp = nl["alpha_crp_cm-1"].get<real_t>() * 1e-4f;
-        alpha_crs = nl["alpha_crs_cm-1"].get<real_t>() * 1e-4f;
-        alpha_cri = nl["alpha_cri_cm-1"].get<real_t>() * 1e-4f;
-        beta_crp  = nl.value("beta_crp_um_W", 0.0f);
-        beta_crs  = nl.value("beta_crs_um_W", 0.0f);
-        beta_cri  = nl.value("beta_cri_um_W", 0.0f);
-        rho_p     = nl.value("rho_p_rad", 0.0f);
-        rho_s     = nl.value("rho_s_rad", 0.0f);
-        rho_i     = nl.value("rho_i_rad", 0.0f);
+        alpha_crp = nl["alpha_crp_cm-1"].get<real_t>() * 1e-4_r;
+        alpha_crs = nl["alpha_crs_cm-1"].get<real_t>() * 1e-4_r;
+        alpha_cri = nl["alpha_cri_cm-1"].get<real_t>() * 1e-4_r;
+        beta_crp  = nl.value("beta_crp_um_W", 0.0_r);
+        beta_crs  = nl.value("beta_crs_um_W", 0.0_r);
+        beta_cri  = nl.value("beta_cri_um_W", 0.0_r);
+        rho_p     = nl.value("rho_p_rad", 0.0_r);
+        rho_s     = nl.value("rho_s_rad", 0.0_r);
+        rho_i     = nl.value("rho_i_rad", 0.0_r);
 
         if (cr.contains("qpm")) {
             const auto& q = cr["qpm"];
-            Lambda0  = q.value("lambda0_um",   0.0f);
-            T0       = q.value("T0_C",          27.0f);
-            alpha_th = q.value("alpha_th_K-1", 1.48e-5f);
-        } else { Lambda0 = 0.0f; T0 = 27.0f; alpha_th = 0.0f; }
+            Lambda0  = q.value("lambda0_um",   0.0_r);
+            T0       = q.value("T0_C",          27.0_r);
+            alpha_th = q.value("alpha_th_K-1", 1.48e-5_r);
+        } else { Lambda0 = 0.0_r; T0 = 27.0_r; alpha_th = 0.0_r; }
 
         if (cr.contains("thermal_props")) {
             const auto& th = cr["thermal_props"];
-            kappa_th = th.value("kappa_W_mK",  4.6f);
-            cp_th    = th.value("cp_J_kgK",  628.0f);
-            rho_th   = th.value("rho_kg_m3", 4640.0f);
-        } else { kappa_th = 4.6f; cp_th = 628.0f; rho_th = 4640.0f; }
+            kappa_th = th.value("kappa_W_mK",  4.6_r);
+            cp_th    = th.value("cp_J_kgK",  628.0_r);
+            rho_th   = th.value("rho_kg_m3", 4640.0_r);
+        } else { kappa_th = 4.6_r; cp_th = 628.0_r; rho_th = 4640.0_r; }
     }
 
     void print() const {
         const char* proc_name[] = {"SHG", "SFG", "OPG", "DFG"};
         print_line();
         std::cout << "  Process : " << proc_name[process] << "\n"
-                  << "  Crystal : L=" << Lcr*1e-3f << " mm"
-                  << "   LX=" << LX*1e-3f << " mm  LY=" << LY*1e-3f << " mm\n"
+                  << "  Crystal : L=" << Lcr*1e-3_r << " mm"
+                  << "   LX=" << LX*1e-3_r << " mm  LY=" << LY*1e-3_r << " mm\n"
                   << "  Wavelengths (μm) :\n"
                   << "    λ_p=" << lp  << "   λ_s=" << ls  << "   λ_i=" << li  << "\n"
                   << "  Refractive indices :\n"
                   << "    n_p=" << np  << "   n_s=" << ns  << "   n_i=" << ni  << "\n"
                   << "  Linear absorption (cm⁻¹) :\n"
-                  << "    α_p=" << alpha_crp*1e4f
-                  <<  "   α_s=" << alpha_crs*1e4f
-                  <<  "   α_i=" << alpha_cri*1e4f << "\n"
+                  << "    α_p=" << alpha_crp*1e4_r
+                  <<  "   α_s=" << alpha_crs*1e4_r
+                  <<  "   α_i=" << alpha_cri*1e4_r << "\n"
                   << "  TPA (cm/GW) :\n"
-                  << "    β_p=" << beta_crp*1e5f
-                  <<  "   β_s=" << beta_crs*1e5f
-                  <<  "   β_i=" << beta_cri*1e5f << "\n"
+                  << "    β_p=" << beta_crp*1e5_r
+                  <<  "   β_s=" << beta_crs*1e5_r
+                  <<  "   β_i=" << beta_cri*1e5_r << "\n"
                   << "  Phase matching :\n"
                   << "    Δk=" << dk << " μm⁻¹   d_eff=" << dQ << " pm/V\n"
                   << "  GVD (fs²/mm) :\n"
-                  << "    β2_p=" << b2p*1e9f
-                  <<  "   β2_s=" << b2s*1e9f
-                  <<  "   β2_i=" << b2i*1e9f << "\n"
+                  << "    β2_p=" << b2p*1e9_r
+                  <<  "   β2_s=" << b2s*1e9_r
+                  <<  "   β2_i=" << b2i*1e9_r << "\n"
                   << "  TOD (fs³/mm) :\n"
-                  << "    β3_p=" << b3p*1e12f
-                  <<  "   β3_s=" << b3s*1e12f
-                  <<  "   β3_i=" << b3i*1e12f << "\n";
+                  << "    β3_p=" << b3p*1e12_r
+                  <<  "   β3_s=" << b3s*1e12_r
+                  <<  "   β3_i=" << b3i*1e12_r << "\n";
         print_line();
     }
 };

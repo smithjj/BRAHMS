@@ -70,10 +70,10 @@ int main(int argc, char* argv[]) {
     const auto& fld       = cfg["fields"];
     real_t pump_power     = fld["pump"]["power_W"].get<real_t>();
     real_t pump_waist     = fld["pump"]["waist_um"].get<real_t>();
-    real_t pump_fwhm      = fld["pump"].value("fwhm_ps", 1.0f);
-    real_t pump_fp        = fld["pump"].value("focal_point_um", 0.0f);
+    real_t pump_fwhm      = fld["pump"].value("fwhm_ps", 1.0_r);
+    real_t pump_fp        = fld["pump"].value("focal_point_um", 0.0_r);
     std::string pump_mode = fld["pump"].value("mode", "waveplane-cw");
-    real_t t_window       = fld.value("t_window_ps", 10.0f);
+    real_t t_window       = fld.value("t_window_ps", 10.0_r);
 
     EFields A(pump_power, pump_waist, &Cr);
     A.set_time_freq_vectors(t_window);
@@ -87,7 +87,7 @@ int main(int argc, char* argv[]) {
         if (fld["signal"].value("noise", true)) {
             A.noise_generator(A.As);
         } else {
-            real_t sig_pwr  = fld["signal"].value("power_W", 0.0f);
+            real_t sig_pwr  = fld["signal"].value("power_W", 0.0_r);
             real_t sig_wst  = fld["signal"].value("waist_um", pump_waist);
             real_t sig_fwhm = fld["signal"].value("fwhm_ps", pump_fwhm);
             real_t sig_fp   = fld["signal"].value("focal_point_um", pump_fp);
@@ -97,7 +97,7 @@ int main(int argc, char* argv[]) {
         if (fld["idler"].value("noise", true)) {
             A.noise_generator(A.Ai);
         } else {
-            real_t idl_pwr  = fld["idler"].value("power_W", 0.0f);
+            real_t idl_pwr  = fld["idler"].value("power_W", 0.0_r);
             real_t idl_wst  = fld["idler"].value("waist_um", pump_waist);
             real_t idl_fwhm = fld["idler"].value("fwhm_ps", pump_fwhm);
             real_t idl_fp   = fld["idler"].value("focal_point_um", pump_fp);
@@ -111,17 +111,17 @@ int main(int argc, char* argv[]) {
     // ── Thermal (optional) ────────────────────────────────────────────────────
     bool   thermal_on  = cfg.contains("thermal") && cfg["thermal"].value("enabled", false);
     real_t T_oven      = thermal_on ? cfg["thermal"].value("T_oven_C",      Cr.T0) : Cr.T0;
-    real_t T_ambient   = thermal_on ? cfg["thermal"].value("T_ambient_C",   25.0f) : 25.0f;
-    real_t h_conv      = thermal_on ? cfg["thermal"].value("h_conv_W_m2K",  10.0f) : 10.0f;
+    real_t T_ambient   = thermal_on ? cfg["thermal"].value("T_ambient_C",   25.0_r) : 25.0_r;
+    real_t h_conv      = thermal_on ? cfg["thermal"].value("h_conv_W_m2K",  10.0_r) : 10.0_r;
     int    th_max_iter = thermal_on ? cfg["thermal"].value("max_iter",       2000)  : 2000;
-    real_t th_tol      = thermal_on ? cfg["thermal"].value("tol",            5e-4f) : 5e-4f;
+    real_t th_tol      = thermal_on ? cfg["thermal"].value("tol",            5e-4_r) : 5e-4_r;
     int    outer_iter  = thermal_on ? cfg["thermal"].value("max_outer_iter",   10)  : 1;
-    real_t outer_tol   = thermal_on ? cfg["thermal"].value("outer_tol",     0.1f)   : 0.1f;
+    real_t outer_tol   = thermal_on ? cfg["thermal"].value("outer_tol",     0.1_r)   : 0.1_r;
 
     // h_conv: W/(m²·K) → W/(μm²·K)  (×1e-12)
     // kappa:  W/(m·K)  → W/(μm·K)   (×1e-6)
-    h_conv   *= 1e-12f;
-    real_t kappa_um = Cr.kappa_th * 1e-6f;
+    h_conv   *= 1e-12_r;
+    real_t kappa_um = Cr.kappa_th * 1e-6_r;
 
     Tfield_cpu Tf;
 
@@ -145,8 +145,7 @@ int main(int argc, char* argv[]) {
         else             S.run_single_pass();
     } else {
         // ── Autoconsistent thermal loop ────────────────────────────────────────
-        const real_t PI_ = 3.14159265f;
-        real_t dk_bare   = Cr.dk + 2.0f * PI_ / Cr.Lambda0;
+        real_t dk_bare   = Cr.dk + 2.0_r * PI / Cr.Lambda0;
 
         // Seed pass: propagate with T = T_oven (uniform, Q = 0)
         std::cout << "  [Thermal] Seed pass  (T = " << T_oven << " °C uniform, Q = 0)...\n";
@@ -207,10 +206,10 @@ int main(int argc, char* argv[]) {
         hsize_t dims[3] = { NZ, NY, NX };
         H5::DataSpace ds(3, dims);
         H5::DataSet   dset = file.createDataSet(
-            "T", H5::PredType::NATIVE_FLOAT, ds);
+            "T", H5_REAL, ds);
         // GPU stores T in IDX3(ix,iy,iz) = iz*NX*NY + iy*NX + ix order
         // which maps to [NZ][NY][NX] HDF5 layout — same for CPU
-        dset.write(Tf.Tf.data(), H5::PredType::NATIVE_FLOAT);
+        dset.write(Tf.Tf.data(), H5_REAL);
         std::cout << "  Thermal field saved → thermal_output.h5\n";
     }
 

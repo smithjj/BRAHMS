@@ -36,8 +36,8 @@ public:
     static constexpr uint32_t N3 = (uint32_t)NX * NY * NZ;
 
     Tfield_cpu()
-        : Ti(N3, 0.0f), Tf(N3, 0.0f),
-          Q(N3, 0.0f), T_outer(N3, 0.0f) {}
+        : Ti(N3, 0.0_r), Tf(N3, 0.0_r),
+          Q(N3, 0.0_r), T_outer(N3, 0.0_r) {}
 
     void set_temperature(real_t T0) {
         std::fill(Ti.begin(), Ti.end(), T0);
@@ -51,7 +51,7 @@ public:
                 Tf[IDX3(ix, 0, iz, NX, NY)] = T_oven;
     }
 
-    void zero_Q() { std::fill(Q.begin(), Q.end(), 0.0f); }
+    void zero_Q() { std::fill(Q.begin(), Q.end(), 0.0_r); }
 
     // Accumulate Q at z-slice iz from optical field amplitudes (t-averaged intensity).
     // Ap/As/Ai are the full field arrays of size SIZE = NX*NY*NT.
@@ -62,15 +62,15 @@ public:
                         real_t alpha_crp, real_t alpha_crs, real_t alpha_cri,
                         real_t np, real_t ns, real_t ni)
     {
-        const real_t fp = 0.5f * EPS0 * C * np;
-        const real_t fs = 0.5f * EPS0 * C * ns;
-        const real_t fi = 0.5f * EPS0 * C * ni;
+        const real_t fp = 0.5_r * EPS0 * C * np;
+        const real_t fs = 0.5_r * EPS0 * C * ns;
+        const real_t fi = 0.5_r * EPS0 * C * ni;
 
         #pragma omp parallel for collapse(2) schedule(static)
         for (uint32_t iy = 0; iy < NY; ++iy)
         for (uint32_t ix = 0; ix < NX; ++ix) {
             // Time-average: Σ_t |A(x,y,t)|² / NT
-            real_t sumP = 0.0f, sumS = 0.0f, sumI = 0.0f;
+            real_t sumP = 0.0_r, sumS = 0.0_r, sumI = 0.0_r;
             for (uint32_t it = 0; it < NT; ++it) {
                 uint32_t I = IDX(ix, iy, it);
                 sumP += std::norm(Ap[I]);
@@ -91,7 +91,7 @@ public:
                real_t kappa, real_t h_conv, real_t T_inf, real_t T_oven)
     {
         const real_t dx2 = dx * dx, dy2 = dy * dy, dz2 = dz * dz;
-        const real_t L2  = 1.0f / (2.0f / dx2 + 2.0f / dy2 + 2.0f / dz2);
+        const real_t L2  = 1.0_r / (2.0_r / dx2 + 2.0_r / dy2 + 2.0_r / dz2);
         const real_t Bix = h_conv * dx / kappa;
         const real_t Biy = h_conv * dy / kappa;
         const real_t Biz = h_conv * dz / kappa;
@@ -121,7 +121,7 @@ public:
                     real_t ax = dy2 / dx2, bx_ = dz2 / dx2;
                     real_t ay = dx2 / dy2, by_ = dz2 / dy2;
                     real_t az = dx2 / dz2, bz_ = dy2 / dz2;
-                    real_t denom, rhs = 0.0f;
+                    real_t denom, rhs = 0.0_r;
 
                     // Safe neighbour access (clamp to boundary on missing side)
                     auto xp = [&]{ return Ti[IDX3(ix < NX-1 ? ix+1 : ix, iy, iz, NX, NY)]; };
@@ -132,19 +132,19 @@ public:
                     auto zm = [&]{ return Ti[IDX3(ix, iy, iz > 0    ? iz-1 : iz, NX, NY)]; };
 
                     if (bx0 && !byN && !bz0 && !bzN) {
-                        denom = 1.0f + 2.0f*ax + 2.0f*bx_ + Bix;
+                        denom = 1.0_r + 2.0_r*ax + 2.0_r*bx_ + Bix;
                         rhs   = xp() + ax*(yp()+ym()) + bx_*(zp()+zm()) + Bix*T_inf;
                     } else if (bxN && !byN && !bz0 && !bzN) {
-                        denom = 1.0f + 2.0f*ax + 2.0f*bx_ + Bix;
+                        denom = 1.0_r + 2.0_r*ax + 2.0_r*bx_ + Bix;
                         rhs   = xm() + ax*(yp()+ym()) + bx_*(zp()+zm()) + Bix*T_inf;
                     } else if (byN && !bx0 && !bxN && !bz0 && !bzN) {
-                        denom = 1.0f + 2.0f*ay + 2.0f*by_ + Biy;
+                        denom = 1.0_r + 2.0_r*ay + 2.0_r*by_ + Biy;
                         rhs   = ym() + ay*(xp()+xm()) + by_*(zp()+zm()) + Biy*T_inf;
                     } else if (bz0 && !bx0 && !bxN && !byN) {
-                        denom = 1.0f + 2.0f*az + 2.0f*bz_ + Biz;
+                        denom = 1.0_r + 2.0_r*az + 2.0_r*bz_ + Biz;
                         rhs   = zp() + az*(xp()+xm()) + bz_*(yp()+ym()) + Biz*T_inf;
                     } else if (bzN && !bx0 && !bxN && !byN) {
-                        denom = 1.0f + 2.0f*az + 2.0f*bz_ + Biz;
+                        denom = 1.0_r + 2.0_r*az + 2.0_r*bz_ + Biz;
                         rhs   = zm() + az*(xp()+xm()) + bz_*(yp()+ym()) + Biz*T_inf;
                     } else {
                         Tf[c] = T_inf;
@@ -158,7 +158,7 @@ public:
 
     // L2 norm ||Tf − Ti||₂ (identical criterion to GPU engine: raw sum, no /N).
     real_t check_convergence() const {
-        real_t sum = 0.0f;
+        real_t sum = 0.0_r;
         #pragma omp parallel for reduction(+:sum) schedule(static)
         for (uint32_t i = 0; i < N3; ++i) {
             real_t d = Tf[i] - Ti[i];
@@ -173,7 +173,7 @@ public:
     // Gauss-Seidel iterations until convergence.
     void solve(real_t dx, real_t dy, real_t dz,
                real_t kappa, real_t h_conv, real_t T_inf, real_t T_oven,
-               int max_iter = 2000, real_t tol = 5e-4f)
+               int max_iter = 2000, real_t tol = 5e-4_r)
     {
         int it = 0;
         for (; it < max_iter; ++it) {
@@ -196,7 +196,7 @@ public:
 
     // RMS(Tf − T_outer) for outer-loop convergence.
     real_t outer_T_rms() const {
-        real_t sum = 0.0f;
+        real_t sum = 0.0_r;
         #pragma omp parallel for reduction(+:sum) schedule(static)
         for (uint32_t i = 0; i < N3; ++i) {
             real_t d = Tf[i] - T_outer[i];

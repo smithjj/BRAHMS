@@ -28,19 +28,23 @@ def _toolchain_env():
     return env
 
 
-def _build_engine(tmp_path_factory, nt):
+def _build_engine(tmp_path_factory, nt, precisions=("float",)):
+    """Build in a scratch copy, once per entry of `precisions` in the *same*
+    directory (so a later build also exercises the Makefile's rebuild-on-change
+    stamp). The binary left behind is the last one built."""
     env = _toolchain_env()
     if not (shutil.which("g++", path=env["PATH"]) and shutil.which(MAKE, path=env["PATH"])):
         pytest.skip("g++ / make not available")
     work = tmp_path_factory.mktemp("engine_omp")
     shutil.copytree(ROOT / "engine_omp", work / "engine_omp",
-                    ignore=shutil.ignore_patterns("twm_cpu", "twm_cpu.exe", "*.o"))
-    r = subprocess.run([MAKE, "-C", str(work / "engine_omp"),
-                        "NX=8", "NY=8", "NZ=20", f"NT={nt}"],
-                       env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
-    # A toolchain is present, so a build failure is a real regression (or a
-    # missing FFTW/HDF5 dev package), not something to skip silently.
-    assert r.returncode == 0, f"CPU engine build failed:\n{r.stdout[-1500:]}{r.stderr[-1500:]}"
+                    ignore=shutil.ignore_patterns("twm_cpu", "twm_cpu.exe", "*.o", ".build_cfg"))
+    for precision in precisions:
+        r = subprocess.run([MAKE, "-C", str(work / "engine_omp"),
+                            "NX=8", "NY=8", "NZ=20", f"NT={nt}", f"PRECISION={precision}"],
+                           env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
+        # A toolchain is present, so a build failure is a real regression (or a
+        # missing FFTW/HDF5 dev package), not something to skip silently.
+        assert r.returncode == 0, f"CPU engine build failed:\n{r.stdout[-1500:]}{r.stderr[-1500:]}"
     exe = work / "engine_omp" / ("twm_cpu" + EXE_SUFFIX)
     assert exe.is_file()
     return exe, env
@@ -54,6 +58,13 @@ def engine(tmp_path_factory):
 @pytest.fixture(scope="module")
 def engine_pulsed(tmp_path_factory):
     return _build_engine(tmp_path_factory, nt=128)
+
+
+@pytest.fixture(scope="module")
+def engine_double(tmp_path_factory):
+    # float first, then double in the same directory: the second build must
+    # notice the precision change and recompile rather than reuse the binary
+    return _build_engine(tmp_path_factory, nt=128, precisions=("float", "double"))
 
 
 def _params(**signal):
@@ -126,6 +137,59 @@ def test_pulse_fwhm_is_the_intensity_fwhm(engine_pulsed, tmp_path):
     assert r.returncode == 0, r.stdout[-1500:] + r.stderr[-1500:]
     t, inten = _pump_input_intensity(out)
     assert _fwhm(t, inten) == pytest.approx(0.2, rel=0.03)
+
+
+def _pulsed_params():
+    """Deterministic (no noise seed) pulsed OPG: injected signal under a strong pump."""
+    params = _params(excitation="inject", power_W=0.01, mode="waveplane-pulsed",
+                     waist_um=30.0, fwhm_ps=0.2)
+    params["pump"].update(mode="waveplane-pulsed", fwhm_ps=0.2, power_W=1e4)
+    params["t_window_ps"] = 1.6
+    return params
+
+
+def _read_field(out, name):
+    h5py = pytest.importorskip("h5py")
+    import numpy as np
+    with h5py.File(out / name) as f:
+        return f["real"].dtype, np.asarray(f["real"], dtype=float) + 1j * np.asarray(f["imag"], dtype=float)
+
+
+class TestPrecision:
+    def test_default_build_is_single_precision(self, engine_pulsed, tmp_path):
+        r, out = _run(engine_pulsed, tmp_path, _pulsed_params())
+        assert r.returncode == 0, r.stdout[-1500:] + r.stderr[-1500:]
+        assert "[precision: single]" in r.stdout
+        assert _read_field(out, "pump_output.h5")[0].itemsize == 4
+
+    def test_double_build_writes_float64(self, engine_double, tmp_path):
+        r, out = _run(engine_double, tmp_path, _pulsed_params())
+        assert r.returncode == 0, r.stdout[-1500:] + r.stderr[-1500:]
+        assert "[precision: double]" in r.stdout
+        for name in ("pump_output.h5", "signal_output.h5", "idler_output.h5", "pump_input_XY.h5"):
+            assert _read_field(out, name)[0].itemsize == 8, name
+
+    def test_double_build_keeps_the_intensity_fwhm(self, engine_double, tmp_path):
+        params = _params()
+        params["pump"].update(mode="waveplane-pulsed", fwhm_ps=0.2)
+        params["t_window_ps"] = 1.6
+        r, out = _run(engine_double, tmp_path, params)
+        assert r.returncode == 0, r.stdout[-1500:] + r.stderr[-1500:]
+        t, inten = _pump_input_intensity(out)
+        assert _fwhm(t, inten) == pytest.approx(0.2, rel=0.03)
+
+    def test_single_and_double_agree(self, engine_pulsed, engine_double, tmp_path):
+        import numpy as np
+        params = _pulsed_params()
+        (tmp_path / "s").mkdir()
+        (tmp_path / "d").mkdir()
+        rs, out_s = _run(engine_pulsed, tmp_path / "s", params)
+        rd, out_d = _run(engine_double, tmp_path / "d", params)
+        assert rs.returncode == 0 and rd.returncode == 0
+        for name in ("pump_output.h5", "signal_output.h5"):
+            a, b = _read_field(out_s, name)[1], _read_field(out_d, name)[1]
+            assert np.abs(b).max() > 0, name
+            assert np.linalg.norm(a - b) / np.linalg.norm(b) < 1e-3, name
 
 
 def test_bad_config_path_fails_cleanly(engine, tmp_path):

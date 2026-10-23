@@ -3,7 +3,7 @@
  * EFields_cpu.hpp
  * ===============
  * Pump/signal/idler electric field envelopes on CPU.
- * FFTs use FFTW3 single-precision (fftwf_*).
+ * FFTs use FFTW3 in the engine precision (FFTW(x) -> fftwf_x or fftw_x).
  * Same conventions as EFields.cuh (same JSON config).
  *
  * Field storage: [NT][NY][NX], index = IDX(x,y,t) = t*NX*NY + y*NX + x
@@ -25,8 +25,8 @@ struct EFields {
     real_t dk;
 
     // FFTW3 plans (reused across all z-steps)
-    fftwf_plan _plan_disp_fwd,  _plan_disp_inv;   // 1D over t  (dispersion)
-    fftwf_plan _plan_diff_fwd,  _plan_diff_inv;   // 2D over xy (diffraction)
+    FFTW(plan) _plan_disp_fwd,  _plan_disp_inv;   // 1D over t  (dispersion)
+    FFTW(plan) _plan_diff_fwd,  _plan_diff_inv;   // 2D over xy (diffraction)
 
     cVec_t _buf_disp;          // [NX*NY*NT] in J2 layout for dispersion FFT
     real_t _dt;                // time step [ps]
@@ -41,54 +41,54 @@ struct EFields {
           _dt(0), _kp(0), _ks(0), _ki(0), _Cr(Cr)
     {
         dk  = Cr->dk;
-        _kp = 2.0f * PI * Cr->np / Cr->lp;
-        _ks = 2.0f * PI * Cr->ns / Cr->ls;
-        _ki = 2.0f * PI * Cr->ni / Cr->li;
+        _kp = 2.0_r * PI * Cr->np / Cr->lp;
+        _ks = 2.0_r * PI * Cr->ns / Cr->ls;
+        _ki = 2.0_r * PI * Cr->ni / Cr->li;
         _rho_p = Cr->rho_p; _rho_s = Cr->rho_s; _rho_i = Cr->rho_i;
 
         // FFTW plans ─────────────────────────────────────────────────────────
         // Dispersion: batched 1D FFT of length NT, NX*NY batches, stride 1
         // Buffer layout [NX*NY][NT] → each row is contiguous in t
         int nt = NT, nxy = NX * NY;
-        _plan_disp_fwd = fftwf_plan_many_dft(
+        _plan_disp_fwd = FFTW(plan_many_dft)(
             1, &nt, nxy,
-            reinterpret_cast<fftwf_complex*>(_buf_disp.data()), nullptr, 1, NT,
-            reinterpret_cast<fftwf_complex*>(_buf_disp.data()), nullptr, 1, NT,
+            reinterpret_cast<FFTW(complex)*>(_buf_disp.data()), nullptr, 1, NT,
+            reinterpret_cast<FFTW(complex)*>(_buf_disp.data()), nullptr, 1, NT,
             FFTW_FORWARD, FFTW_MEASURE);
-        _plan_disp_inv = fftwf_plan_many_dft(
+        _plan_disp_inv = FFTW(plan_many_dft)(
             1, &nt, nxy,
-            reinterpret_cast<fftwf_complex*>(_buf_disp.data()), nullptr, 1, NT,
-            reinterpret_cast<fftwf_complex*>(_buf_disp.data()), nullptr, 1, NT,
+            reinterpret_cast<FFTW(complex)*>(_buf_disp.data()), nullptr, 1, NT,
+            reinterpret_cast<FFTW(complex)*>(_buf_disp.data()), nullptr, 1, NT,
             FFTW_BACKWARD, FFTW_MEASURE);
 
         // Diffraction: batched 2D FFT of size NY×NX, NT batches
         // Field layout [NT][NY][NX]: each t-slice is contiguous
         int dims2[2] = {NY, NX};
-        _plan_diff_fwd = fftwf_plan_many_dft(
+        _plan_diff_fwd = FFTW(plan_many_dft)(
             2, dims2, NT,
-            reinterpret_cast<fftwf_complex*>(Ap.data()), nullptr, 1, NX*NY,
-            reinterpret_cast<fftwf_complex*>(Ap.data()), nullptr, 1, NX*NY,
+            reinterpret_cast<FFTW(complex)*>(Ap.data()), nullptr, 1, NX*NY,
+            reinterpret_cast<FFTW(complex)*>(Ap.data()), nullptr, 1, NX*NY,
             FFTW_FORWARD, FFTW_MEASURE);
-        _plan_diff_inv = fftwf_plan_many_dft(
+        _plan_diff_inv = FFTW(plan_many_dft)(
             2, dims2, NT,
-            reinterpret_cast<fftwf_complex*>(Ap.data()), nullptr, 1, NX*NY,
-            reinterpret_cast<fftwf_complex*>(Ap.data()), nullptr, 1, NX*NY,
+            reinterpret_cast<FFTW(complex)*>(Ap.data()), nullptr, 1, NX*NY,
+            reinterpret_cast<FFTW(complex)*>(Ap.data()), nullptr, 1, NX*NY,
             FFTW_BACKWARD, FFTW_MEASURE);
     }
 
     ~EFields() {
-        fftwf_destroy_plan(_plan_disp_fwd);
-        fftwf_destroy_plan(_plan_disp_inv);
-        fftwf_destroy_plan(_plan_diff_fwd);
-        fftwf_destroy_plan(_plan_diff_inv);
+        FFTW(destroy_plan)(_plan_disp_fwd);
+        FFTW(destroy_plan)(_plan_disp_inv);
+        FFTW(destroy_plan)(_plan_diff_fwd);
+        FFTW(destroy_plan)(_plan_diff_inv);
     }
 
     // ── Time / frequency vectors ──────────────────────────────────────────────
     // Same convention as GPU/pycuTWM: linspace(-T/2, T/2, NT) → dt = T/(NT-1)
     void set_time_freq_vectors(real_t t_window_ps) {
         _dt = t_window_ps / static_cast<real_t>(NT - 1);
-        real_t t0  = -t_window_ps / 2.0f;
-        real_t F0  = -0.5f * static_cast<real_t>(NT) / t_window_ps;
+        real_t t0  = -t_window_ps / 2.0_r;
+        real_t F0  = -0.5_r * static_cast<real_t>(NT) / t_window_ps;
         real_t dF  = static_cast<real_t>(NT) / (t_window_ps * static_cast<real_t>(NT - 1));
         for (uint32_t i = 0; i < NT; ++i) {
             t[i] = t0 + i * _dt;
@@ -97,14 +97,14 @@ struct EFields {
         // w = 2π × fftshift(F)  — same construction as GPU
         for (uint32_t i = 0; i < NT; ++i) {
             uint32_t j = (i + NT/2) % NT;
-            _w[i] = 2.0f * PI * F[j];
+            _w[i] = 2.0_r * PI * F[j];
         }
     }
 
     // ── Noise initialisation ──────────────────────────────────────────────────
     void noise_generator(cVec_t& A) {
         std::mt19937 rng(std::random_device{}());
-        std::normal_distribution<float> dist(0.0f, 1e-15f);
+        std::normal_distribution<real_t> dist(0.0_r, 1e-15_r);
         for (auto& z : A) z = {dist(rng), dist(rng)};
     }
 
@@ -119,11 +119,11 @@ struct EFields {
                      real_t fp_um, const std::string& mode, const char* label)
     {
         // Voltage amplitude [V/μm] — same convention as GPU engine
-        real_t A0   = std::sqrt(4.0f * power_W / (EPS0 * C * PI * n_val * waist_um * waist_um));
+        real_t A0   = std::sqrt(4.0_r * power_W / (EPS0 * C * PI * n_val * waist_um * waist_um));
         // fwhm_ps is the FWHM of the intensity (|A|^2). The field envelope is
         // exp(-t^2/(2 sig^2)), so intensity is exp(-t^2/sig^2) and
         // sig = FWHM / (2 sqrt(ln 2)).  (Pulse energy = P_peak * sig * sqrt(pi).)
-        real_t sig  = fwhm_ps / (2.0f * std::sqrt(std::log(2.0f)));
+        real_t sig  = fwhm_ps / (2.0_r * std::sqrt(std::log(2.0_r)));
         bool pulsed  = (mode.find("pulsed") != std::string::npos);
         bool focused = (mode.find("focused") != std::string::npos);
         real_t w2   = waist_um * waist_um;
@@ -131,14 +131,14 @@ struct EFields {
         // Focused: MX = 1 - i·η, η = fp/z_R
         // The SSFM diffraction operator exp(-ikx²dz/2k) decreases q by dz each step.
         // For the waist to form at z=fp, we need q(z=0) = +fp + iz_R, which gives MX = 1 - i·η.
-        complex_t MX{1.0f, 0.0f};
+        complex_t MX{1.0_r, 0.0_r};
         if (focused) {
             real_t zR = n_val * PI * w2 / lambda_val;
-            MX = complex_t{1.0f, -fp_um / zR};
+            MX = complex_t{1.0_r, -fp_um / zR};
         }
 
-        real_t cx = (_Cr->LX / 2.0f);
-        real_t cy = (_Cr->LY / 2.0f);
+        real_t cx = (_Cr->LX / 2.0_r);
+        real_t cy = (_Cr->LY / 2.0_r);
 
         #pragma omp parallel for collapse(3)
         for (uint32_t it = 0; it < NT; ++it)
@@ -151,12 +151,12 @@ struct EFields {
             complex_t val;
             if (focused) {
                 // Complex Gaussian: converging wavefront, focus at fp_um
-                val = (complex_t{A0, 0.0f} / MX) * std::exp(complex_t{-r2/w2, 0.0f} / MX);
+                val = (complex_t{A0, 0.0_r} / MX) * std::exp(complex_t{-r2/w2, 0.0_r} / MX);
             } else {
                 // Plane wave: real Gaussian at crystal face (matches GPU setWavePlaneCW)
-                val = {A0 * std::exp(-r2 / w2), 0.0f};
+                val = {A0 * std::exp(-r2 / w2), 0.0_r};
             }
-            if (pulsed) val *= std::exp(-t[it]*t[it] / (2.0f*sig*sig));
+            if (pulsed) val *= std::exp(-t[it]*t[it] / (2.0_r*sig*sig));
             target[IDX(ix,iy,it)] = val;
         }
 
@@ -168,7 +168,7 @@ struct EFields {
         if (focused) {
             real_t zR = n_val * PI * w2 / lambda_val;
             real_t eta = fp_um / zR;
-            real_t xi  = (_Cr->Lcr * lambda_val) / (2.0f * PI * n_val * w2);
+            real_t xi  = (_Cr->Lcr * lambda_val) / (2.0_r * PI * n_val * w2);
             std::cout << "    focal point = " << fp_um << " μm\n"
                       << "    z_R  = " << zR  << " μm\n"
                       << "    η    = " << eta << "  (fp/z_R)\n"
@@ -213,26 +213,26 @@ struct EFields {
                 _buf_disp[J2(ix,iy,it)] = Afield[IDX(ix,iy,it)];
 
         // Backward FFT first (matches GPU: CUFFT_INVERSE → multiply → CUFFT_FORWARD)
-        fftwf_execute_dft(_plan_disp_inv,
-            reinterpret_cast<fftwf_complex*>(_buf_disp.data()),
-            reinterpret_cast<fftwf_complex*>(_buf_disp.data()));
+        FFTW(execute_dft)(_plan_disp_inv,
+            reinterpret_cast<FFTW(complex)*>(_buf_disp.data()),
+            reinterpret_cast<FFTW(complex)*>(_buf_disp.data()));
 
         // Multiply by dispersion propagator — same w as GPU (fftshift of linspace)
-        real_t norm = 1.0f / static_cast<real_t>(NT);
+        real_t norm = 1.0_r / static_cast<real_t>(NT);
         #pragma omp parallel for collapse(2)
         for (uint32_t iy = 0; iy < NY; ++iy)
         for (uint32_t ix = 0; ix < NX; ++ix) {
             for (uint32_t it = 0; it < NT; ++it) {
                 real_t ww  = _w[it];
-                real_t phi = dz * ww * (gvm + 0.5f*b2*ww + (1.0f/6.0f)*b3*ww*ww);
+                real_t phi = dz * ww * (gvm + 0.5_r*b2*ww + (1.0_r/6.0_r)*b3*ww*ww);
                 _buf_disp[J2(ix,iy,it)] *= CpxExp(phi) * norm;
             }
         }
 
         // Forward FFT
-        fftwf_execute_dft(_plan_disp_fwd,
-            reinterpret_cast<fftwf_complex*>(_buf_disp.data()),
-            reinterpret_cast<fftwf_complex*>(_buf_disp.data()));
+        FFTW(execute_dft)(_plan_disp_fwd,
+            reinterpret_cast<FFTW(complex)*>(_buf_disp.data()),
+            reinterpret_cast<FFTW(complex)*>(_buf_disp.data()));
 
         // Reorder back to IDX layout
         #pragma omp parallel for collapse(2)
@@ -252,26 +252,26 @@ struct EFields {
         if (NX <= 1 && NY <= 1) return;  // 1D: no diffraction
 
         // In-place 2D FFT (plans were created for Ap.data() but pointer is same layout)
-        fftwf_execute_dft(_plan_diff_fwd,
-            reinterpret_cast<fftwf_complex*>(Afield.data()),
-            reinterpret_cast<fftwf_complex*>(Afield.data()));
+        FFTW(execute_dft)(_plan_diff_fwd,
+            reinterpret_cast<FFTW(complex)*>(Afield.data()),
+            reinterpret_cast<FFTW(complex)*>(Afield.data()));
 
-        real_t norm = 1.0f / static_cast<real_t>(NX * NY);
-        real_t tan_rho = tanf(rho);
+        real_t norm = 1.0_r / static_cast<real_t>(NX * NY);
+        real_t tan_rho = std::tan(rho);
         #pragma omp parallel for collapse(3)
         for (uint32_t it = 0; it < NT; ++it)
         for (uint32_t iy = 0; iy < NY; ++iy)
         for (uint32_t ix = 0; ix < NX; ++ix) {
             int mx = (ix < NX/2) ? (int)ix : (int)ix - NX;
             int my = (iy < NY/2) ? (int)iy : (int)iy - NY;
-            real_t kx = 2.0f * PI * mx / (_Cr->LX);
-            real_t ky = 2.0f * PI * my / (_Cr->LY);
-            real_t phi = -(kx*kx + ky*ky) / (2.0f * k0) * dz - kx * tan_rho * dz;
+            real_t kx = 2.0_r * PI * mx / (_Cr->LX);
+            real_t ky = 2.0_r * PI * my / (_Cr->LY);
+            real_t phi = -(kx*kx + ky*ky) / (2.0_r * k0) * dz - kx * tan_rho * dz;
             Afield[IDX(ix,iy,it)] *= CpxExp(phi) * norm;
         }
 
-        fftwf_execute_dft(_plan_diff_inv,
-            reinterpret_cast<fftwf_complex*>(Afield.data()),
-            reinterpret_cast<fftwf_complex*>(Afield.data()));
+        FFTW(execute_dft)(_plan_diff_inv,
+            reinterpret_cast<FFTW(complex)*>(Afield.data()),
+            reinterpret_cast<FFTW(complex)*>(Afield.data()));
     }
 };

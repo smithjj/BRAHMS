@@ -29,9 +29,9 @@ static void dAdz(
     real_t beta_p, real_t beta_s, real_t beta_i,
     real_t dk_phase, int process, int dir, bool undepleted)
 {
-    const real_t Ip_fac = 0.5f * EPS0 * C * np;
-    const real_t Is_fac = 0.5f * EPS0 * C * ns;
-    const real_t Ii_fac = 0.5f * EPS0 * C * ni;
+    const real_t Ip_fac = 0.5_r * EPS0 * C * np;
+    const real_t Is_fac = 0.5_r * EPS0 * C * ns;
+    const real_t Ii_fac = 0.5_r * EPS0 * C * ni;
 
     #pragma omp parallel for collapse(3) schedule(static)
     for (uint32_t it = 0; it < NT; ++it)
@@ -43,20 +43,20 @@ static void dAdz(
 
         if (process == PROC_SHG) {
             dAp[I] =      Im * kappa_p * As_ * std::conj(Ap_) * CpxExp(+ph)
-                        - 0.5f * (alpha_p + beta_p * Ip_fac * std::norm(Ap_)) * Ap_;
-            dAs[I] = 0.5f*Im * kappa_s * Ap_ * Ap_             * CpxExp(-ph)
-                        - 0.5f * (alpha_s + beta_s * Is_fac * std::norm(As_)) * As_;
-            dAi[I] = 0.5f*Im * kappa_i * Ap_ * Ap_             * CpxExp(-ph)
-                        - 0.5f * (alpha_i + beta_i * Ii_fac * std::norm(Ai_)) * Ai_;
+                        - 0.5_r * (alpha_p + beta_p * Ip_fac * std::norm(Ap_)) * Ap_;
+            dAs[I] = 0.5_r*Im * kappa_s * Ap_ * Ap_             * CpxExp(-ph)
+                        - 0.5_r * (alpha_s + beta_s * Is_fac * std::norm(As_)) * As_;
+            dAi[I] = 0.5_r*Im * kappa_i * Ap_ * Ap_             * CpxExp(-ph)
+                        - 0.5_r * (alpha_i + beta_i * Ii_fac * std::norm(Ai_)) * Ai_;
         } else {
             dAp[I] = Im * kappa_p * As_ * Ai_              * CpxExp(-ph)
-                       - 0.5f * (alpha_p + beta_p * Ip_fac * std::norm(Ap_)) * Ap_;
+                       - 0.5_r * (alpha_p + beta_p * Ip_fac * std::norm(Ap_)) * Ap_;
             dAs[I] = Im * kappa_s * Ap_ * std::conj(Ai_)   * CpxExp(+ph)
-                       - 0.5f * (alpha_s + beta_s * Is_fac * std::norm(As_)) * As_;
+                       - 0.5_r * (alpha_s + beta_s * Is_fac * std::norm(As_)) * As_;
             dAi[I] = Im * kappa_i * Ap_ * std::conj(As_)   * CpxExp(+ph)
-                       - 0.5f * (alpha_i + beta_i * Ii_fac * std::norm(Ai_)) * Ai_;
+                       - 0.5_r * (alpha_i + beta_i * Ii_fac * std::norm(Ai_)) * Ai_;
         }
-        if (undepleted) dAp[I] = complex_t{0.0f, 0.0f};
+        if (undepleted) dAp[I] = complex_t{0.0_r, 0.0_r};
     }
 }
 
@@ -72,7 +72,7 @@ static void rk4_half(
     const std::vector<real_t>& dkcum_z, const std::vector<real_t>& dk_z,
     uint32_t iz, int process, int dir, real_t dz, bool undepleted)
 {
-    real_t h      = dz / 2.0f;
+    real_t h      = dz / 2.0_r;
     real_t cum    = dkcum_z[iz];
     real_t dk_loc = dk_z[iz];
 
@@ -91,26 +91,26 @@ static void rk4_half(
     // k2 at sub-position dz/4
     #pragma omp parallel for
     for (uint32_t I = 0; I < SIZE; ++I) {
-        tp[I] = Ap[I] + (h/2.0f)*k1p[I];
-        ts[I] = As[I] + (h/2.0f)*k1s[I];
-        ti[I] = Ai[I] + (h/2.0f)*k1i[I];
+        tp[I] = Ap[I] + (h/2.0_r)*k1p[I];
+        ts[I] = As[I] + (h/2.0_r)*k1s[I];
+        ti[I] = Ai[I] + (h/2.0_r)*k1i[I];
     }
     dAdz(k2p,k2s,k2i, tp,ts,ti,
          kappa_p,kappa_s,kappa_i, alpha_p,alpha_s,alpha_i,
          np,ns,ni, beta_p,beta_s,beta_i,
-         cum + (h/2.0f)*dk_loc, process, dir, undepleted);
+         cum + (h/2.0_r)*dk_loc, process, dir, undepleted);
 
     // k3 at sub-position dz/4
     #pragma omp parallel for
     for (uint32_t I = 0; I < SIZE; ++I) {
-        tp[I] = Ap[I] + (h/2.0f)*k2p[I];
-        ts[I] = As[I] + (h/2.0f)*k2s[I];
-        ti[I] = Ai[I] + (h/2.0f)*k2i[I];
+        tp[I] = Ap[I] + (h/2.0_r)*k2p[I];
+        ts[I] = As[I] + (h/2.0_r)*k2s[I];
+        ti[I] = Ai[I] + (h/2.0_r)*k2i[I];
     }
     dAdz(k3p,k3s,k3i, tp,ts,ti,
          kappa_p,kappa_s,kappa_i, alpha_p,alpha_s,alpha_i,
          np,ns,ni, beta_p,beta_s,beta_i,
-         cum + (h/2.0f)*dk_loc, process, dir, undepleted);
+         cum + (h/2.0_r)*dk_loc, process, dir, undepleted);
 
     // k4 at sub-position dz/2
     #pragma omp parallel for
@@ -124,12 +124,12 @@ static void rk4_half(
          np,ns,ni, beta_p,beta_s,beta_i,
          cum + h*dk_loc, process, dir, undepleted);
 
-    real_t c = h / 6.0f;
+    real_t c = h / 6.0_r;
     #pragma omp parallel for
     for (uint32_t I = 0; I < SIZE; ++I) {
-        Ap[I] += c * (k1p[I] + 2.0f*k2p[I] + 2.0f*k3p[I] + k4p[I]);
-        As[I] += c * (k1s[I] + 2.0f*k2s[I] + 2.0f*k3s[I] + k4s[I]);
-        Ai[I] += c * (k1i[I] + 2.0f*k2i[I] + 2.0f*k3i[I] + k4i[I]);
+        Ap[I] += c * (k1p[I] + 2.0_r*k2p[I] + 2.0_r*k3p[I] + k4p[I]);
+        As[I] += c * (k1s[I] + 2.0_r*k2s[I] + 2.0_r*k3s[I] + k4s[I]);
+        Ai[I] += c * (k1i[I] + 2.0_r*k2i[I] + 2.0_r*k3i[I] + k4i[I]);
     }
 }
 
@@ -148,17 +148,17 @@ struct Solver {
 
     Solver(Crystal* Cr, EFields* A, const json& cfg, Tfield_cpu* tf = nullptr)
         : _Cr(Cr), _A(A), _Tf(tf), _dir(1),
-          dk_z(NZ, Cr->dk), dkcum_z(NZ, 0.0f)
+          dk_z(NZ, Cr->dk), dkcum_z(NZ, 0.0_r)
     {
-        _kappa_p = PI * Cr->dQ * 1e-6f / (Cr->np * Cr->lp);
-        _kappa_s = PI * Cr->dQ * 1e-6f / (Cr->ns * Cr->ls);
-        _kappa_i = PI * Cr->dQ * 1e-6f / (Cr->ni * Cr->li);
+        _kappa_p = PI * Cr->dQ * 1e-6_r / (Cr->np * Cr->lp);
+        _kappa_s = PI * Cr->dQ * 1e-6_r / (Cr->ns * Cr->ls);
+        _kappa_i = PI * Cr->dQ * 1e-6_r / (Cr->ni * Cr->li);
         build_cumulative();
     }
 
     // Exclusive prefix-sum of dk_z * dz
     void build_cumulative() {
-        real_t acc = 0.0f;
+        real_t acc = 0.0_r;
         for (uint32_t iz = 0; iz < NZ; ++iz) {
             dkcum_z[iz] = acc;
             acc += dk_z[iz] * _Cr->dz;
@@ -168,15 +168,14 @@ struct Solver {
     // Update z-varying dk from a 3D temperature field T[NZ×NY×NX] (row-major IDX3).
     // Uses the xy-mean of Δk(T) at each z-slice — same QPM formula as GPU engine.
     void update_dk_from_T(const std::vector<real_t>& T3D) {
-        const real_t PI_  = 3.14159265f;
-        real_t dk_bare = _Cr->dk + 2.0f * PI_ / _Cr->Lambda0;
+        real_t dk_bare = _Cr->dk + 2.0_r * PI / _Cr->Lambda0;
         for (uint32_t iz = 0; iz < NZ; ++iz) {
-            real_t sum = 0.0f;
+            real_t sum = 0.0_r;
             for (uint32_t iy = 0; iy < NY; ++iy)
             for (uint32_t ix = 0; ix < NX; ++ix) {
                 real_t T_loc = T3D[IDX3(ix, iy, iz, NX, NY)];
-                real_t Lam_T = _Cr->Lambda0 * (1.0f + _Cr->alpha_th * (T_loc - _Cr->T0));
-                sum += dk_bare - 2.0f * PI_ / Lam_T;
+                real_t Lam_T = _Cr->Lambda0 * (1.0_r + _Cr->alpha_th * (T_loc - _Cr->T0));
+                sum += dk_bare - 2.0_r * PI / Lam_T;
             }
             dk_z[iz] = sum / (real_t)(NX * NY);
         }
@@ -188,9 +187,9 @@ struct Solver {
         EFields& A  = *_A;
         int proc = Cr.process;
 
-        real_t GVM_p = 1.0f/Cr.vp - 1.0f/Cr.vs;
-        real_t GVM_s = 0.0f;
-        real_t GVM_i = 1.0f/Cr.vi - 1.0f/Cr.vs;
+        real_t GVM_p = 1.0_r/Cr.vp - 1.0_r/Cr.vs;
+        real_t GVM_s = 0.0_r;
+        real_t GVM_i = 1.0_r/Cr.vi - 1.0_r/Cr.vs;
 
         std::cout << "  Solver ready.\n";
 

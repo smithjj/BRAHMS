@@ -29,10 +29,10 @@ inline uint32_t J2(uint32_t ix, uint32_t iy, uint32_t it) {
 }
 
 // ── Complex helpers ───────────────────────────────────────────────────────────
-static const complex_t Im = {0.0f, 1.0f};
+static const complex_t Im = {0.0_r, 1.0_r};
 
 inline complex_t CpxExp(real_t phi) {
-    return {cosf(phi), sinf(phi)};
+    return {std::cos(phi), std::sin(phi)};
 }
 inline real_t CpxAbs2(complex_t z) {
     return z.real()*z.real() + z.imag()*z.imag();
@@ -53,7 +53,8 @@ inline void print_grid() {
 }
 
 inline void print_engine_info() {
-    std::cout << "CPU: OpenMP  [threads: " << omp_get_max_threads() << "]\n";
+    std::cout << "CPU: OpenMP  [threads: " << omp_get_max_threads() << "]  "
+              << "[precision: " << (sizeof(real_t) == 8 ? "double" : "single") << "]\n";
 }
 
 inline void welcome_cpu() {

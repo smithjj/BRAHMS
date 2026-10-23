@@ -9,6 +9,7 @@ engine_omp/twm_cpu
 engine_omp/twm_cpu_*
 engine_omp/bench_*
 engine_omp/*.o
+engine_omp/.build_cfg
 engine_gpu/twm
 engine_gpu/twm.exe
 engine_gpu/*.o
