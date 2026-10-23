@@ -11,6 +11,7 @@ from PyQt6.QtGui import QFont
 
 from ..widgets.sci_spinbox import SciDoubleSpinBox
 from ..widgets.power_energy import PowerEnergyControl
+from ..widgets.preflight_panel import PreflightPanel
 from ..core_py.crystal_db import get_db
 
 _LOCALE_C = QLocale(QLocale.Language.C)   # always uses '.' as decimal separator
@@ -170,6 +171,9 @@ class SimulationTab(QWidget):
         rv.setSpacing(6)
         rv.setContentsMargins(4, 4, 4, 4)
 
+        self.preflight = PreflightPanel()
+        rv.addWidget(self.preflight)
+
         self.log = QTextEdit()
         self.log.setObjectName("logOutput")
         self.log.setReadOnly(True)
@@ -208,6 +212,7 @@ class SimulationTab(QWidget):
         self.chk_degen.toggled.connect(self._on_degenerate)
         self.sb_waist.valueChanged.connect(self._auto_lxly)
         self._update_visibility()
+        self.preflight.watch(self, self._collect_params)
         self._auto_lxly()
 
         # Radio buttons / checkboxes are stretched to the full column width by

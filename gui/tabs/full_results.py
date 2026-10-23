@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer
 
+from ..core_py.preflight import irradiance_scale
 from ..widgets.plot_canvas import PlotCanvas
 
 
@@ -50,21 +51,6 @@ def irradiance_W_cm2(A: np.ndarray, n: float) -> np.ndarray:
     """Irradiance I = ½·n·ε₀·c·|A|² [W/cm²] from the engine's field amplitude
     (engine units give W/μm²)."""
     return 0.5 * n * _EPS0 * _C * np.abs(A) ** 2 * _UM2_PER_CM2
-
-
-def irradiance_scale(i_max: float):
-    """(scale_factor, unit_string) so that i_max * scale_factor is of order 1-1000."""
-    for threshold, scale, unit in [
-        (1e12, 1e-12, "TW/cm²"),
-        (1e9,  1e-9,  "GW/cm²"),
-        (1e6,  1e-6,  "MW/cm²"),
-        (1e3,  1e-3,  "kW/cm²"),
-        (1.0,  1.0,   "W/cm²"),
-        (1e-3, 1e3,   "mW/cm²"),
-    ]:
-        if i_max >= threshold:
-            return scale, unit
-    return 1e6, "μW/cm²"
 
 
 def _load_complex(path: str) -> "np.ndarray | None":

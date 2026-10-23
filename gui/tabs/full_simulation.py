@@ -17,6 +17,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QLocale
 
 from ..widgets.sci_spinbox import SciDoubleSpinBox
 from ..widgets.power_energy import PowerEnergyControl
+from ..widgets.preflight_panel import PreflightPanel
 from .simulation import FieldGroupBox, FWHM_TOOLTIP
 from ..core_py.crystal_db import get_db
 
@@ -80,6 +81,8 @@ class FullSimulationTab(QWidget):
         right.setMinimumWidth(360); right.setMaximumWidth(620)
         rv = QVBoxLayout(right)
         rv.setSpacing(6); rv.setContentsMargins(4, 4, 4, 4)
+        self.preflight = PreflightPanel()
+        rv.addWidget(self.preflight)
         self.log = QTextEdit()
         self.log.setObjectName("logOutput")
         self.log.setReadOnly(True)
@@ -127,6 +130,7 @@ class FullSimulationTab(QWidget):
         self.sb_ly.setValue(0.500)
         self._update_twindow_auto()
         self._update_memory_estimate()
+        self.preflight.watch(self, self._collect_params)
 
     # ── Group builders ─────────────────────────────────────────────────
 

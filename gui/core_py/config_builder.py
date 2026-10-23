@@ -12,6 +12,7 @@ import numpy as np
 
 from .crystal_db import CrystalDB, get_db
 from .sellmeier import SellmeierFormula, MixedExtraordinaryIndex
+from .preflight import preflight_summary
 
 
 _C = 299.792_458  # μm/ps
@@ -388,5 +389,6 @@ def config_summary(cfg: dict) -> str:
         f"  n_pump  : {opt['np']:.5f}  n_signal: {opt['ns']:.5f}\n"
         f"  Δk_eff  : {dk:.4f} μm⁻¹  (Δk·L = {dk * cr['geometry']['Lcr_mm'] * 1e3:.2f} rad)\n"
         f"  GVD_p   : {opt['b2p_ps2_um']*1e9:.2f} fs²/mm  "
-        f"GVD_s: {opt['b2s_ps2_um']*1e9:.2f} fs²/mm"
+        f"GVD_s: {opt['b2s_ps2_um']*1e9:.2f} fs²/mm\n"
+        f"{preflight_summary(cfg)}"
     )
