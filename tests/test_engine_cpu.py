@@ -28,7 +28,7 @@ def _toolchain_env():
     return env
 
 
-def _build_engine(tmp_path_factory, nt, precisions=("float",)):
+def _build_engine(tmp_path_factory, nt, precisions=("float",), nx=8, ny=8, nz=20):
     """Build in a scratch copy, once per entry of `precisions` in the *same*
     directory (so a later build also exercises the Makefile's rebuild-on-change
     stamp). The binary left behind is the last one built."""
@@ -40,7 +40,7 @@ def _build_engine(tmp_path_factory, nt, precisions=("float",)):
                     ignore=shutil.ignore_patterns("twm_cpu", "twm_cpu.exe", "*.o", ".build_cfg"))
     for precision in precisions:
         r = subprocess.run([MAKE, "-C", str(work / "engine_omp"),
-                            "NX=8", "NY=8", "NZ=20", f"NT={nt}", f"PRECISION={precision}"],
+                            f"NX={nx}", f"NY={ny}", f"NZ={nz}", f"NT={nt}", f"PRECISION={precision}"],
                            env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
         # A toolchain is present, so a build failure is a real regression (or a
         # missing FFTW/HDF5 dev package), not something to skip silently.

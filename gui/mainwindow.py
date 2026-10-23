@@ -13,6 +13,7 @@ from .tabs.sweep           import SweepTab
 from .tabs.phase_matching  import PhaseMatchingTab
 from .tabs.full_simulation import FullSimulationTab
 from .tabs.full_results    import FullResultsTab
+from .tabs.beam_analysis   import BeamAnalysisTab
 from .core_py.config_builder import build_config, config_summary
 from .core_py.engine_runner  import EngineRunner
 
@@ -47,7 +48,9 @@ class MainWindow(QMainWindow):
         self.results_tab      = ResultsTab()
         self.full_sim_tab     = FullSimulationTab()
         self.full_results_tab = FullResultsTab()
-        self.sweep_tab        = SweepTab(sim_tab_ref=self.sim_tab,
+        self.beam_tab         = BeamAnalysisTab()      # single simulation
+        self.full_beam_tab    = BeamAnalysisTab()      # (3+1)D simulation
+        self.sweep_tab       = SweepTab(sim_tab_ref=self.sim_tab,
                                           crystal_tab_ref=self.crystal_tab)
 
         # Single simulation: inner tab widget with "Set Parameters" and "Results"
@@ -55,12 +58,14 @@ class MainWindow(QMainWindow):
         self.single_sim_tabs.setDocumentMode(True)
         self.single_sim_tabs.addTab(self.sim_tab,     "  Set Parameters  ")
         self.single_sim_tabs.addTab(self.results_tab, "  Results  ")
+        self.single_sim_tabs.addTab(self.beam_tab,    "  Beam Analysis  ")
 
         # (3+1)D Simulations: inner tab widget with "Set Parameters" and "Results"
         self.full_3d_tabs = QTabWidget()
         self.full_3d_tabs.setDocumentMode(True)
         self.full_3d_tabs.addTab(self.full_sim_tab,     "  Set Parameters  ")
         self.full_3d_tabs.addTab(self.full_results_tab, "  Results  ")
+        self.full_3d_tabs.addTab(self.full_beam_tab,    "  Beam Analysis  ")
 
         self.tabs.addTab(self.crystal_tab,     "  Nonlinear Crystals  ")
         self.tabs.addTab(self.pm_tab,          "  Phase Matching  ")
@@ -202,6 +207,7 @@ class MainWindow(QMainWindow):
             if success:
                 self.lbl_status.setText("Done.")
                 self.full_results_tab.load_output_dir(out_dir)
+                self.full_beam_tab.set_output_dir(out_dir)
                 self.tabs.setCurrentWidget(self.full_3d_tabs)
                 self.full_3d_tabs.setCurrentWidget(self.full_results_tab)
             else:
@@ -213,6 +219,7 @@ class MainWindow(QMainWindow):
             if success:
                 self.lbl_status.setText("Done.")
                 self.results_tab.load_output_dir(out_dir)
+                self.beam_tab.set_output_dir(out_dir)
                 self.tabs.setCurrentWidget(self.single_sim_tabs)
                 self.single_sim_tabs.setCurrentWidget(self.results_tab)
             else:
