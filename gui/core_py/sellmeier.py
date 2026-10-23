@@ -121,23 +121,23 @@ class SellmeierFormula:
     def n(self, L, T=25.0) -> np.ndarray:
         """Refractive index n(λ [μm], T [°C])."""
         self._check()
-        val = self._fn(self._L(L), self._T(T))
+        val = np.asarray(self._fn(self._L(L), self._T(T)))
         return np.where(np.isreal(val), np.real(val).astype(float), np.nan)
 
     def dn_dL(self, L, T=25.0) -> np.ndarray:
         """First derivative dn/dλ  [μm⁻¹]."""
         self._check()
-        return np.real(self._fdn(self._L(L), self._T(T))).astype(float)
+        return np.real(np.asarray(self._fdn(self._L(L), self._T(T)))).astype(float)
 
     def d2n_dL2(self, L, T=25.0) -> np.ndarray:
         """Second derivative d²n/dλ²  [μm⁻²]."""
         self._check()
-        return np.real(self._fd2n(self._L(L), self._T(T))).astype(float)
+        return np.real(np.asarray(self._fd2n(self._L(L), self._T(T)))).astype(float)
 
     def d3n_dL3(self, L, T=25.0) -> np.ndarray:
         """Third derivative d³n/dλ³  [μm⁻³]."""
         self._check()
-        return np.real(self._fd3n(self._L(L), self._T(T))).astype(float)
+        return np.real(np.asarray(self._fd3n(self._L(L), self._T(T)))).astype(float)
 
     # ------------------------------------------------------------------
     # Dispersion parameters
