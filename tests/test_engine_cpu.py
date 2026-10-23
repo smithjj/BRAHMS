@@ -28,8 +28,7 @@ def _toolchain_env():
     return env
 
 
-@pytest.fixture(scope="module")
-def engine(tmp_path_factory):
+def _build_engine(tmp_path_factory, nt):
     env = _toolchain_env()
     if not (shutil.which("g++", path=env["PATH"]) and shutil.which(MAKE, path=env["PATH"])):
         pytest.skip("g++ / make not available")
@@ -37,7 +36,7 @@ def engine(tmp_path_factory):
     shutil.copytree(ROOT / "engine_omp", work / "engine_omp",
                     ignore=shutil.ignore_patterns("twm_cpu", "twm_cpu.exe", "*.o"))
     r = subprocess.run([MAKE, "-C", str(work / "engine_omp"),
-                        "NX=8", "NY=8", "NZ=20", "NT=1"],
+                        "NX=8", "NY=8", "NZ=20", f"NT={nt}"],
                        env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
     # A toolchain is present, so a build failure is a real regression (or a
     # missing FFTW/HDF5 dev package), not something to skip silently.
@@ -45,6 +44,16 @@ def engine(tmp_path_factory):
     exe = work / "engine_omp" / ("twm_cpu" + EXE_SUFFIX)
     assert exe.is_file()
     return exe, env
+
+
+@pytest.fixture(scope="module")
+def engine(tmp_path_factory):
+    return _build_engine(tmp_path_factory, nt=1)
+
+
+@pytest.fixture(scope="module")
+def engine_pulsed(tmp_path_factory):
+    return _build_engine(tmp_path_factory, nt=128)
 
 
 def _params(**signal):
@@ -86,6 +95,37 @@ def test_injected_signal_run_succeeds(engine, tmp_path):
                   _params(excitation="inject", power_W=0.01, mode="focused-cw"))
     assert r.returncode == 0, r.stdout[-1500:] + r.stderr[-1500:]
     assert EXPECTED_OUTPUTS <= {p.name for p in out.iterdir()}
+
+
+def _pump_input_intensity(out):
+    """(t [ps], on-axis |A_pump_in|^2) from the saved input pump field."""
+    h5py = pytest.importorskip("h5py")
+    import numpy as np
+    with h5py.File(out / "time.h5") as f:
+        t = np.asarray(f["data"]).ravel()
+    with h5py.File(out / "pump_input_XY.h5") as f:
+        a = np.asarray(f["real"]) + 1j * np.asarray(f["imag"])
+    a = a.reshape(len(t), -1)                       # [NT, NY*NX]
+    return t, (np.abs(a) ** 2).max(axis=1)           # peak over the transverse plane
+
+
+def _fwhm(t, y):
+    import numpy as np
+    above = np.where(y >= y.max() / 2)[0]
+    i0, i1 = above[0], above[-1]
+    def cross(i, j):                                # linear interpolation of the half-max crossing
+        return t[i] + (y.max() / 2 - y[i]) * (t[j] - t[i]) / (y[j] - y[i])
+    return cross(i1, i1 + 1) - cross(i0 - 1, i0)
+
+
+def test_pulse_fwhm_is_the_intensity_fwhm(engine_pulsed, tmp_path):
+    params = _params()
+    params["pump"].update(mode="waveplane-pulsed", fwhm_ps=0.2)
+    params["t_window_ps"] = 1.6
+    r, out = _run(engine_pulsed, tmp_path, params)
+    assert r.returncode == 0, r.stdout[-1500:] + r.stderr[-1500:]
+    t, inten = _pump_input_intensity(out)
+    assert _fwhm(t, inten) == pytest.approx(0.2, rel=0.03)
 
 
 def test_bad_config_path_fails_cleanly(engine, tmp_path):

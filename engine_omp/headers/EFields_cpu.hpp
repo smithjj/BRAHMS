@@ -120,7 +120,10 @@ struct EFields {
     {
         // Voltage amplitude [V/μm] — same convention as GPU engine
         real_t A0   = std::sqrt(4.0f * power_W / (EPS0 * C * PI * n_val * waist_um * waist_um));
-        real_t sig  = fwhm_ps / (2.0f * std::sqrt(2.0f * std::log(2.0f)));
+        // fwhm_ps is the FWHM of the intensity (|A|^2). The field envelope is
+        // exp(-t^2/(2 sig^2)), so intensity is exp(-t^2/sig^2) and
+        // sig = FWHM / (2 sqrt(ln 2)).  (Pulse energy = P_peak * sig * sqrt(pi).)
+        real_t sig  = fwhm_ps / (2.0f * std::sqrt(std::log(2.0f)));
         bool pulsed  = (mode.find("pulsed") != std::string::npos);
         bool focused = (mode.find("focused") != std::string::npos);
         real_t w2   = waist_um * waist_um;

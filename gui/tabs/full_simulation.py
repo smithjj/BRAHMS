@@ -16,7 +16,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QLocale
 
 from ..widgets.sci_spinbox import SciDoubleSpinBox
-from .simulation import FieldGroupBox
+from ..widgets.power_energy import PowerEnergyControl
+from .simulation import FieldGroupBox, FWHM_TOOLTIP
 from ..core_py.crystal_db import get_db
 
 _LOCALE_C = QLocale(QLocale.Language.C)
@@ -150,25 +151,29 @@ class FullSimulationTab(QWidget):
         self.sb_lp.setRange(0.1, 20); self.sb_lp.setDecimals(4); self.sb_lp.setValue(1.064)
         g.addWidget(self.sb_lp, 0, 1)
 
-        g.addWidget(QLabel("Power (W)"), 1, 0)
-        self.sb_power = QDoubleSpinBox()
-        self.sb_power.setRange(1e-9, 1e9); self.sb_power.setDecimals(4); self.sb_power.setValue(1.0)
-        g.addWidget(self.sb_power, 1, 1)
-
-        g.addWidget(QLabel("Waist w₀ (μm)"), 2, 0)
-        self.sb_waist = QDoubleSpinBox()
-        self.sb_waist.setRange(0.1, 10000); self.sb_waist.setValue(60.0)
-        g.addWidget(self.sb_waist, 2, 1)
-
-        g.addWidget(QLabel("FWHM (ps)"), 3, 0)
         self.sb_fwhm = QDoubleSpinBox()
         self.sb_fwhm.setRange(0.001, 1e5); self.sb_fwhm.setValue(0.2)
-        g.addWidget(self.sb_fwhm, 3, 1)
+        self.sb_fwhm.setToolTip(FWHM_TOOLTIP)
 
-        g.addWidget(QLabel("Focal point"), 4, 0)
+        self.power_ctl = PowerEnergyControl(self.sb_fwhm, value_W=1.0, parent=self)
+        self.power_ctl.set_pulsed(True)       # this tab is always pulsed
+        self.sb_power = self.power_ctl.spin
+        g.addWidget(self.power_ctl.cb_kind, 1, 0)
+        g.addWidget(self.sb_power, 1, 1)
+        g.addWidget(self.power_ctl.lbl_hint, 2, 1)
+
+        g.addWidget(QLabel("Waist w₀ (μm)"), 3, 0)
+        self.sb_waist = QDoubleSpinBox()
+        self.sb_waist.setRange(0.1, 10000); self.sb_waist.setValue(60.0)
+        g.addWidget(self.sb_waist, 3, 1)
+
+        g.addWidget(QLabel("FWHM (ps, intensity)"), 4, 0)
+        g.addWidget(self.sb_fwhm, 4, 1)
+
+        g.addWidget(QLabel("Focal point"), 5, 0)
         self.cb_focus = QComboBox()
         self.cb_focus.addItems(["Crystal centre (0.5·L)", "Crystal start (z=0)"])
-        g.addWidget(self.cb_focus, 4, 1)
+        g.addWidget(self.cb_focus, 5, 1)
 
         return gb
 
@@ -458,7 +463,7 @@ class FullSimulationTab(QWidget):
                 "lambda_um":   self.sb_lp.value(),
                 "regime":      "Pulsed",
                 "profile":     "Focused Gaussian",
-                "power_W":     self.sb_power.value(),
+                **self.power_ctl.params(),
                 "waist_um":    self.sb_waist.value(),
                 "fwhm_ps":     self.sb_fwhm.value(),
                 "focal_preset": focal_preset,
@@ -467,7 +472,7 @@ class FullSimulationTab(QWidget):
                 "lambda_um":  self.sb_ls.value(),
                 "excitation": "noise" if self.signal_gb.rb_noise.isChecked() else "inject",
                 "mode":       self.signal_gb.cb_field_mode.currentData(),
-                "power_W":    self.signal_gb.sb_power.value(),
+                **self.signal_gb.power_params(),
                 "waist_um":   self.signal_gb.sb_waist.value(),
                 "fwhm_ps":    self.signal_gb.sb_fwhm.value(),
             },
@@ -476,7 +481,7 @@ class FullSimulationTab(QWidget):
                 "degenerate": self.chk_degen.isChecked(),
                 "excitation": "noise" if self.idler_gb.rb_noise.isChecked() else "inject",
                 "mode":       self.idler_gb.cb_field_mode.currentData(),
-                "power_W":    self.idler_gb.sb_power.value(),
+                **self.idler_gb.power_params(),
                 "waist_um":   self.idler_gb.sb_waist.value(),
                 "fwhm_ps":    self.idler_gb.sb_fwhm.value(),
             },

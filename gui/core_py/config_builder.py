@@ -72,22 +72,57 @@ def _dk_qpm(k_p: float, k_s: float, k_i: float, Lambda_um: float) -> float:
     return dk_bare - (2.0 * math.pi / Lambda_um) if Lambda_um > 0 else dk_bare
 
 
+# Gaussian pulse: E = P_peak · ∫exp(-4 ln2 t²/F²) dt = P_peak · F · sqrt(π / (4 ln 2)),
+# with F the FWHM of the intensity (the engines' fwhm_ps convention).
+ENERGY_PER_PEAK_POWER_FWHM = math.sqrt(math.pi / (4.0 * math.log(2.0)))   # ≈ 1.0645
+
+
+def peak_power_from_energy(energy_J: float, fwhm_ps: float) -> float:
+    """Peak power [W] of a Gaussian pulse of energy [J] and intensity FWHM [ps]."""
+    if fwhm_ps <= 0:
+        raise ValueError("Pulse FWHM must be positive to convert energy to peak power")
+    return energy_J / (fwhm_ps * 1e-12 * ENERGY_PER_PEAK_POWER_FWHM)
+
+
+def energy_from_peak_power(power_W: float, fwhm_ps: float) -> float:
+    """Pulse energy [J] of a Gaussian pulse of peak power [W] and intensity FWHM [ps]."""
+    return power_W * fwhm_ps * 1e-12 * ENERGY_PER_PEAK_POWER_FWHM
+
+
+def _resolve_peak_power(field_params: dict, fwhm_ps: float, pulsed: bool) -> float:
+    """Peak power [W] for a field: "power_W", or "energy_J" if that key is given.
+
+    The engines take peak power. Energy is only meaningful for a pulsed field.
+    """
+    if field_params.get("energy_J") is None:
+        return float(field_params.get("power_W", 0.0))
+    if not pulsed:
+        raise ValueError("Pulse energy can only be specified for a pulsed field; "
+                         "give power_W for a CW field")
+    return peak_power_from_energy(float(field_params["energy_J"]), fwhm_ps)
+
+
 def _field_block(field_params: dict, default_waist_um: float,
                   default_fwhm_ps: float, Lcr_mm: float) -> dict:
     """Build the fields.signal / fields.idler JSON block.
 
     "excitation" selects vacuum noise vs. an injected field; "mode" (used
     only when injecting) is one of the four wave-plane/focused x cw/pulsed
-    modes, same convention as the pump's "mode".
+    modes, same convention as the pump's "mode". An injected pulsed field may
+    give "energy_J" instead of "power_W".
     """
     excitation = field_params.get("excitation", "noise")
+    mode = field_params.get("mode", "waveplane-cw")
+    fwhm_ps = float(field_params.get("fwhm_ps", default_fwhm_ps))
+    power_W = (float(field_params.get("power_W", 0.0)) if excitation == "noise"
+               else _resolve_peak_power(field_params, fwhm_ps, "pulsed" in mode))
     return {
         "noise":          excitation == "noise",
-        "power_W":        float(field_params.get("power_W", 0.0)),
+        "power_W":        power_W,
         "waist_um":       float(field_params.get("waist_um", default_waist_um)),
-        "fwhm_ps":        float(field_params.get("fwhm_ps", default_fwhm_ps)),
+        "fwhm_ps":        fwhm_ps,
         "focal_point_um": Lcr_mm * 500.0,  # crystal centre in μm (same convention as pump)
-        "mode":           field_params.get("mode", "waveplane-cw"),
+        "mode":           mode,
     }
 
 
@@ -299,7 +334,7 @@ def build_config(params: dict, db: CrystalDB | None = None) -> dict:
         "crystal": crystal_cfg,
         "fields": {
             "pump": {
-                "power_W":        float(params["pump"]["power_W"]),
+                "power_W":        _resolve_peak_power(params["pump"], fwhm_ps, _pulsed),
                 "waist_um":       waist_um,
                 "fwhm_ps":        fwhm_ps,
                 "focal_point_um": Lcr_mm * 500.0,  # crystal centre in μm

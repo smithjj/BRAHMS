@@ -4,7 +4,8 @@ import numpy as np
 import pytest
 
 from gui.core_py.config_builder import (
-    _dk_qpm, _field_block, _idler_wavelength, build_config, config_summary)
+    _dk_qpm, _field_block, _idler_wavelength, build_config, config_summary,
+    energy_from_peak_power, peak_power_from_energy)
 
 
 def make_params(process="OPG", crystal="MgO:PPLN", **over):
@@ -54,6 +55,58 @@ class TestHelpers:
         assert fb["noise"] is False
         assert (fb["power_W"], fb["waist_um"], fb["fwhm_ps"]) == (0.01, 20.0, 0.5)
         assert fb["mode"] == "focused-pulsed"
+
+
+class TestPulseEnergy:
+    def test_gaussian_energy_peak_power_relation(self):
+        # E = P_peak · FWHM · sqrt(pi / (4 ln 2)) ≈ 1.0645 · P_peak · FWHM
+        assert energy_from_peak_power(1.0, 1.0) == pytest.approx(1.0645e-12, rel=1e-4)
+
+    @pytest.mark.parametrize("E,F", [(1e-9, 0.2), (3e-6, 5.0), (1e-12, 0.001)])
+    def test_roundtrip(self, E, F):
+        assert energy_from_peak_power(peak_power_from_energy(E, F), F) == pytest.approx(E)
+
+    def test_matches_numerical_integral_of_intensity_fwhm_pulse(self):
+        F, P = 0.35, 12.0                                     # ps, W
+        t = np.linspace(-20 * F, 20 * F, 400001)
+        I = P * np.exp(-4 * np.log(2) * (t / F) ** 2)         # intensity FWHM = F
+        E_num = np.trapezoid(I, t) * 1e-12
+        assert energy_from_peak_power(P, F) == pytest.approx(E_num, rel=1e-6)
+
+    def test_nonpositive_fwhm_rejected(self):
+        with pytest.raises(ValueError):
+            peak_power_from_energy(1e-9, 0.0)
+
+    def test_pump_energy_becomes_peak_power(self, db):
+        p = make_params()
+        p["pump"].update(mode="focused-pulsed", fwhm_ps=0.5)
+        p["pump"].pop("power_W"); p["pump"]["energy_J"] = 2e-9
+        got = build_config(p, db)["fields"]["pump"]["power_W"]
+        assert got == pytest.approx(peak_power_from_energy(2e-9, 0.5))
+
+    def test_energy_wins_over_stale_power(self, db):
+        p = make_params()
+        p["pump"].update(mode="focused-pulsed", fwhm_ps=0.5, power_W=999.0, energy_J=2e-9)
+        assert build_config(p, db)["fields"]["pump"]["power_W"] == \
+            pytest.approx(peak_power_from_energy(2e-9, 0.5))
+
+    def test_cw_pump_rejects_energy(self, db):
+        p = make_params()
+        p["pump"]["energy_J"] = 1e-9
+        with pytest.raises(ValueError, match="pulsed"):
+            build_config(p, db)
+
+    def test_injected_pulsed_signal_energy_uses_its_own_fwhm(self, db):
+        p = make_params()
+        p["signal"].update(excitation="inject", mode="focused-pulsed",
+                           fwhm_ps=2.0, energy_J=1e-12)
+        got = build_config(p, db)["fields"]["signal"]["power_W"]
+        assert got == pytest.approx(peak_power_from_energy(1e-12, 2.0))
+
+    def test_noise_signal_ignores_energy(self, db):
+        p = make_params()
+        p["signal"].update(energy_J=1e-12, mode="focused-cw")   # would be invalid if used
+        assert build_config(p, db)["fields"]["signal"]["noise"] is True
 
 
 class TestBuildConfig:

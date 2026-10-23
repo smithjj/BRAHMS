@@ -229,7 +229,10 @@ private:
 void EFields::init_field(cVecd_t& target, real_t n_val, real_t lambda_val,
                           real_t Pwr, real_t FWHM, real_t wst, real_t fp,
                           const std::string& mode, const char* label) {
-    real_t tau  = FWHM * sqrtf(2.0f) / (2.0f * sqrtf(2.0f * logf(2.0f)));
+    // FWHM is the FWHM of the intensity (|A|^2). The kernels use the field
+    // envelope exp(-(t/tau)^2), so intensity is exp(-2 t^2/tau^2) and
+    // tau = FWHM / sqrt(2 ln 2).  (Same pulse as the CPU engine.)
+    real_t tau  = FWHM / sqrtf(2.0f * logf(2.0f));
     real_t w02  = wst * wst;
     real_t zR   = PI * n_val * w02 / lambda_val;
     real_t eta  = fp / zR;
