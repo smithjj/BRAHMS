@@ -18,9 +18,9 @@ import numpy as np
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QSplitter,
     QLabel, QPushButton, QFileDialog, QFrame,
-    QLineEdit, QSlider, QComboBox,
+    QLineEdit, QSlider, QComboBox, QSpinBox, QCheckBox,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 
 from ..widgets.plot_canvas import PlotCanvas
 
@@ -41,6 +41,30 @@ def _format_energy(E_J: float) -> str:
     if E_J >= 1e-12:
         return f"{E_J * 1e12:.2f} pJ"
     return f"{E_J * 1e12:.2e} pJ"
+
+
+_UM2_PER_CM2 = 1e8     # 1 cm² = 1e8 μm²
+
+
+def irradiance_W_cm2(A: np.ndarray, n: float) -> np.ndarray:
+    """Irradiance I = ½·n·ε₀·c·|A|² [W/cm²] from the engine's field amplitude
+    (engine units give W/μm²)."""
+    return 0.5 * n * _EPS0 * _C * np.abs(A) ** 2 * _UM2_PER_CM2
+
+
+def irradiance_scale(i_max: float):
+    """(scale_factor, unit_string) so that i_max * scale_factor is of order 1-1000."""
+    for threshold, scale, unit in [
+        (1e12, 1e-12, "TW/cm²"),
+        (1e9,  1e-9,  "GW/cm²"),
+        (1e6,  1e-6,  "MW/cm²"),
+        (1e3,  1e-3,  "kW/cm²"),
+        (1.0,  1.0,   "W/cm²"),
+        (1e-3, 1e3,   "mW/cm²"),
+    ]:
+        if i_max >= threshold:
+            return scale, unit
+    return 1e6, "μW/cm²"
 
 
 def _load_complex(path: str) -> "np.ndarray | None":
@@ -128,6 +152,29 @@ class FullResultsTab(QWidget):
         t_row.addWidget(self.lbl_t)
         lv.addLayout(t_row)
 
+        # Movie controls: step through the time slices automatically (looping)
+        play_row = QHBoxLayout()
+        self.btn_play = QPushButton("▶ Play")
+        self.btn_play.setCheckable(True)
+        self.btn_play.setToolTip("Loop through the time slices")
+        self.sb_fps = QSpinBox()
+        self.sb_fps.setRange(1, 60); self.sb_fps.setValue(10)
+        self.sb_fps.setSuffix(" fps")
+        self.chk_fixed_scale = QCheckBox("Fixed color scale")
+        self.chk_fixed_scale.setChecked(True)
+        self.chk_fixed_scale.setToolTip(
+            "Use the maximum over all times for the color scale, so brightness "
+            "changes are visible while playing.")
+        play_row.addWidget(self.btn_play)
+        play_row.addWidget(self.sb_fps)
+        play_row.addWidget(self.chk_fixed_scale)
+        play_row.addStretch()
+        lv.addLayout(play_row)
+
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._advance_frame)
+        self._peak_cache: dict = {}
+
         splitter.addWidget(left)
 
         # ── RIGHT: 4 stacked P(t) panels (Input Pump + 3 outputs) ───
@@ -156,6 +203,9 @@ class FullResultsTab(QWidget):
         # Connections
         self.sl_t.valueChanged.connect(self._on_t_slider)
         self.cb_wave.currentTextChanged.connect(self._draw_xy)
+        self.btn_play.toggled.connect(self._on_play_toggled)
+        self.sb_fps.valueChanged.connect(self._on_fps_changed)
+        self.chk_fixed_scale.toggled.connect(self._draw_xy)
 
         self._init_placeholders()
 
@@ -165,7 +215,7 @@ class FullResultsTab(QWidget):
         ax = self.canvas_xy.get_ax(0)
         ax.text(0.5, 0.5, "No data", ha="center", va="center",
                 color="#555555", transform=ax.transAxes, fontsize=11)
-        ax.set_title("NX×NY  |A|²  at  t-slice", fontsize=9)
+        ax.set_title("NX×NY  irradiance  at  t-slice", fontsize=9)
         self.canvas_xy.refresh()
 
         for w in _ALL_WAVES:
@@ -284,25 +334,34 @@ class FullResultsTab(QWidget):
         if A is None:
             ax.text(0.5, 0.5, "No data", ha="center", va="center",
                     color="#555555", transform=ax.transAxes, fontsize=11)
-            ax.set_title(f"{wave}  |A|²  at  t-slice", fontsize=9)
+            ax.set_title(f"{wave}  irradiance  at  t-slice", fontsize=9)
             self.canvas_xy.refresh()
             return
 
         nt, ny, nx = A.shape
         it = min(int(self.sl_t.value()), nt - 1)
-        dx, dy, dt, *_, lx_um, ly_um = self._grid_params(nt, ny, nx)
+        dx, dy, dt, n_p, n_s, n_i, lx_um, ly_um = self._grid_params(nt, ny, nx)
+        n = {"Input Pump": n_p, "Pump": n_p, "Signal": n_s, "Idler": n_i}[wave]
 
-        I_slice = np.abs(A[it]) ** 2           # [NY, NX]
+        I_slice = irradiance_W_cm2(A[it], n)    # [NY, NX]  W/cm²
+        i_max   = float(I_slice.max())
+        # Fixed scale: unit and color limits from the maximum over all times,
+        # so the brightness is comparable from frame to frame.
+        i_ref   = (self._global_peak_irradiance(wave, A, n)
+                   if self.chk_fixed_scale.isChecked() else i_max)
+        scale, unit = irradiance_scale(i_ref)
         ext     = [-lx_um/2, lx_um/2, -ly_um/2, ly_um/2]
 
-        im = ax.imshow(I_slice, origin="lower", cmap="inferno",
-                       aspect="equal", extent=ext, interpolation="bilinear")
+        im = ax.imshow(I_slice * scale, origin="lower", cmap="inferno",
+                       aspect="equal", extent=ext, interpolation="bilinear",
+                       vmin=0.0, vmax=i_ref * scale if i_ref > 0 else None)
         self._cbar_xy = self.canvas_xy.fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
         self._cbar_xy.ax.tick_params(colors="white", labelsize=7)
-        self._cbar_xy.ax.yaxis.label.set_color("white")
+        self._cbar_xy.set_label(f"Irradiance ({unit})", fontsize=8, color="white")
 
         t_str = self._t_label(it)
-        ax.set_title(f"{wave}  |A|²  at  t = {t_str}", fontsize=9)
+        ax.set_title(f"{wave}  irradiance  at  t = {t_str}\n"
+                     f"max = {i_max * scale:.3g} {unit}", fontsize=9)
         ax.set_xlabel("x (μm)", fontsize=8)
         ax.set_ylabel("y (μm)", fontsize=8)
         self.lbl_t.setText(t_str)
@@ -364,3 +423,33 @@ class FullResultsTab(QWidget):
 
     def _on_t_slider(self):
         self._draw_xy()
+
+    # ── Movie playback ─────────────────────────────────────────────────
+
+    def _on_play_toggled(self, playing: bool):
+        if playing and self.sl_t.maximum() < 1:
+            self.btn_play.setChecked(False)         # nothing to play
+            return
+        self.btn_play.setText("⏸ Pause" if playing else "▶ Play")
+        if playing:
+            self._timer.start(int(1000 / self.sb_fps.value()))
+        else:
+            self._timer.stop()
+
+    def _on_fps_changed(self):
+        if self._timer.isActive():
+            self._timer.start(int(1000 / self.sb_fps.value()))
+
+    def _advance_frame(self):
+        """Next time slice, wrapping to the first after the last."""
+        nxt = self.sl_t.value() + 1
+        self.sl_t.setValue(nxt if nxt <= self.sl_t.maximum() else 0)
+
+    def _global_peak_irradiance(self, wave: str, A: np.ndarray, n: float) -> float:
+        """Max irradiance [W/cm²] over all times for `wave` (cached per array)."""
+        cached = self._peak_cache.get(wave)
+        if cached is None or cached[0] is not A or cached[1] != n:
+            peak = float(irradiance_W_cm2(np.abs(A).max(), n))
+            cached = (A, n, peak)
+            self._peak_cache[wave] = cached
+        return cached[2]
