@@ -14,7 +14,21 @@ NY  ?= 128
 NZ  ?= 100
 NT  ?= 512
 
+ifeq ($(OS),Windows_NT)
+    WINDOWS := 1
+endif
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
+ifdef WINDOWS
+# MSYS2 MinGW-w64 prefix (pacman -S mingw-w64-x86_64-{gcc,make,fftw,hdf5,nlohmann-json}).
+# Override with MINGW_PREFIX=... if MSYS2 lives elsewhere.
+MINGW_PREFIX ?= C:/msys64/mingw64
+FFTW3_INC := $(MINGW_PREFIX)/include
+FFTW3_LIB := $(MINGW_PREFIX)/lib
+HDF5_INC  ?= $(MINGW_PREFIX)/include
+HDF5_LIB  ?= $(MINGW_PREFIX)/lib
+JSON_INC  ?= $(MINGW_PREFIX)/include
+else
 # FFTW3 — try common conda install locations (any user), then pkg-config,
 # then the standard system paths (Debian/Ubuntu multiarch layout).
 CONDA_FFTW := $(shell find $(HOME)/anaconda3/pkgs $(HOME)/miniconda3/pkgs \
@@ -40,6 +54,7 @@ endif
 HDF5_INC  ?= /usr/include/hdf5/serial
 HDF5_LIB  ?= /usr/lib/x86_64-linux-gnu/hdf5/serial
 JSON_INC  ?= /usr/include
+endif
 
 # ── Compiler ──────────────────────────────────────────────────────────────────
 CXX = g++
@@ -54,11 +69,17 @@ CXXFLAGS = -std=c++17 -O3 -march=native -fopenmp \
 
 LDFLAGS = -fopenmp \
           -L$(FFTW3_LIB) -lfftw3f_omp -lfftw3f \
-          -Wl,-rpath,$(FFTW3_LIB) \
           -L$(HDF5_LIB) -lhdf5_cpp -lhdf5 \
           -lm
+ifndef WINDOWS
+LDFLAGS += -Wl,-rpath,$(FFTW3_LIB)
+endif
 
+ifdef WINDOWS
+TARGET = twm_cpu.exe
+else
 TARGET = twm_cpu
+endif
 SRCS   = twm_cpu.cpp
 
 .PHONY: all clean info
@@ -73,9 +94,13 @@ $(TARGET): $(SRCS) headers/*.hpp
 	@echo "  [OK]  ./$(TARGET) ready"
 
 clean:
+ifdef WINDOWS
+	-del /Q $(TARGET) *.o 2>NUL
+else
 	rm -f $(TARGET) *.o
+endif
 
 info:
 	@echo "NX=$(NX) NY=$(NY) NZ=$(NZ) NT=$(NT)"
 	@echo "FFTW3_INC=$(FFTW3_INC)"
-	@$(CXX) --version | head -1
+	@$(CXX) --version

@@ -15,6 +15,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QLocale
 
+from ..widgets.sci_spinbox import SciDoubleSpinBox
+from .simulation import FieldGroupBox
 from ..core_py.crystal_db import get_db
 
 _LOCALE_C = QLocale(QLocale.Language.C)
@@ -51,6 +53,7 @@ class FullSimulationTab(QWidget):
         lv.addWidget(self._build_process_group())
         lv.addWidget(self._build_pump_group())
         lv.addWidget(self._build_signal_group())
+        lv.addWidget(self._build_idler_group())
         lv.addStretch()
         scroll1.setWidget(left)
         splitter.addWidget(scroll1)
@@ -170,27 +173,48 @@ class FullSimulationTab(QWidget):
         return gb
 
     def _build_signal_group(self):
-        gb = QGroupBox("Signal / Idler Wavelengths")
-        g  = QGridLayout(gb); g.setSpacing(6)
-
-        g.addWidget(QLabel("λ signal (μm)"), 0, 0)
+        self.signal_gb = FieldGroupBox("Signal Field")
+        self._init_seed_defaults(self.signal_gb)
+        g = self.signal_gb.layout()
+        self.lbl_ls = QLabel("λ signal (μm)")
         self.sb_ls = QDoubleSpinBox()
         self.sb_ls.setRange(0.1, 20); self.sb_ls.setDecimals(4); self.sb_ls.setValue(1.4500)
-        g.addWidget(self.sb_ls, 0, 1)
+        row = QHBoxLayout()
+        row.addWidget(self.lbl_ls)
+        row.addWidget(self.sb_ls)
+        g.insertLayout(0, row)
+        return self.signal_gb
 
-        g.addWidget(QLabel("λ idler (μm)"), 1, 0)
-        self.sb_li = QDoubleSpinBox()
-        self.sb_li.setRange(0.1, 20); self.sb_li.setDecimals(4); self.sb_li.setValue(3.9969)
-        g.addWidget(self.sb_li, 1, 1)
+    def _build_idler_group(self):
+        # chk_degen lives outside idler_gb so disabling the group (when
+        # degenerate) doesn't also disable the checkbox.
+        wrapper = QWidget()
+        wl = QVBoxLayout(wrapper)
+        wl.setContentsMargins(0, 0, 0, 0)
+        wl.setSpacing(4)
 
         self.chk_degen = QCheckBox("Degenerate  (signal = idler)")
-        g.addWidget(self.chk_degen, 2, 0, 1, 2)
+        self.idler_gb = FieldGroupBox("Idler Field")
+        self._init_seed_defaults(self.idler_gb)
+        g = self.idler_gb.layout()
+        self.lbl_li = QLabel("λ idler (μm)")
+        self.sb_li = QDoubleSpinBox()
+        self.sb_li.setRange(0.1, 20); self.sb_li.setDecimals(4); self.sb_li.setValue(3.9969)
+        row = QHBoxLayout()
+        row.addWidget(self.lbl_li)
+        row.addWidget(self.sb_li)
+        g.insertLayout(0, row)
+        wl.addWidget(self.idler_gb)
+        wl.addWidget(self.chk_degen)
+        self.chk_degen.toggled.connect(lambda c: self.idler_gb.setEnabled(not c))
+        return wrapper
 
-        note = QLabel("Signal/idler start as vacuum noise.")
-        note.setObjectName("unitLabel"); note.setWordWrap(True)
-        g.addWidget(note, 3, 0, 1, 2)
-
-        return gb
+    @staticmethod
+    def _init_seed_defaults(gb):
+        """This tab is always pulsed + focused Gaussian, so an injected
+        seed defaults to focused-pulsed (still user-changeable)."""
+        gb.cb_field_mode.setCurrentIndex(gb.cb_field_mode.findData("focused-pulsed"))
+        gb.sb_fwhm.setValue(0.2)
 
     def _build_crystal_group(self):
         gb = QGroupBox("Crystal")
@@ -234,8 +258,8 @@ class FullSimulationTab(QWidget):
 
         self.chk_force_dk = QCheckBox("Force Δk (μm⁻¹)")
         g.addWidget(self.chk_force_dk, 6, 0)
-        self.sb_dk_forced = QDoubleSpinBox()
-        self.sb_dk_forced.setRange(-10.0, 10.0); self.sb_dk_forced.setDecimals(6)
+        self.sb_dk_forced = SciDoubleSpinBox()
+        self.sb_dk_forced.setRange(-10.0, 10.0); self.sb_dk_forced.setDecimals(12)
         self.sb_dk_forced.setValue(0.0)
         self.sb_dk_forced.setEnabled(False)
         g.addWidget(self.sb_dk_forced, 6, 1)
@@ -372,8 +396,9 @@ class FullSimulationTab(QWidget):
 
     def _on_process_changed(self, proc):
         shg = (proc == "SHG")
-        self.sb_ls.setEnabled(not shg)
-        self.sb_li.setEnabled(not shg)
+        self.signal_gb.setEnabled(not shg)
+        self.idler_gb.setEnabled(not shg and not self.chk_degen.isChecked())
+        self.chk_degen.setEnabled(not shg)
 
     def _update_memory_estimate(self):
         nx = self.sb_nx.value()
@@ -439,13 +464,21 @@ class FullSimulationTab(QWidget):
                 "focal_preset": focal_preset,
             },
             "signal": {
-                "lambda_um": self.sb_ls.value(),
-                "mode":      "noise",
+                "lambda_um":  self.sb_ls.value(),
+                "excitation": "noise" if self.signal_gb.rb_noise.isChecked() else "inject",
+                "mode":       self.signal_gb.cb_field_mode.currentData(),
+                "power_W":    self.signal_gb.sb_power.value(),
+                "waist_um":   self.signal_gb.sb_waist.value(),
+                "fwhm_ps":    self.signal_gb.sb_fwhm.value(),
             },
             "idler": {
                 "lambda_um":  self.sb_li.value(),
                 "degenerate": self.chk_degen.isChecked(),
-                "mode":       "noise",
+                "excitation": "noise" if self.idler_gb.rb_noise.isChecked() else "inject",
+                "mode":       self.idler_gb.cb_field_mode.currentData(),
+                "power_W":    self.idler_gb.sb_power.value(),
+                "waist_um":   self.idler_gb.sb_waist.value(),
+                "fwhm_ps":    self.idler_gb.sb_fwhm.value(),
             },
             "grid": {
                 "NX": self.sb_nx.value(),

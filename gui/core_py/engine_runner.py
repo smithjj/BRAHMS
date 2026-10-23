@@ -31,6 +31,31 @@ else:
     MAKE_CMD = "make"
 
 
+EXE_SUFFIX = ".exe" if sys.platform == "win32" else ""
+
+
+def mingw_bin_dir() -> str | None:
+    """Directory holding the MinGW toolchain and its runtime DLLs (libgomp,
+    HDF5, FFTW), derived from where g++/mingw32-make live on PATH. The CPU
+    engine needs it on PATH at run time, not only at build time."""
+    if sys.platform != "win32":
+        return None
+    for tool in ("g++", "mingw32-make"):
+        found = shutil.which(tool)
+        if found:
+            return os.path.dirname(found)
+    return None
+
+
+def cpu_engine_env() -> QProcessEnvironment:
+    """Process environment for building/running the CPU engine."""
+    env = QProcessEnvironment.systemEnvironment()
+    mingw = mingw_bin_dir()
+    if mingw:
+        env.insert("PATH", mingw + os.pathsep + env.value("PATH"))
+    return env
+
+
 def _find_vcvars64() -> str | None:
     """Locate VC\\Auxiliary\\Build\\vcvars64.bat from any VS/Build Tools
     install (2022, 2026, ...) via vswhere. nvcc on Windows needs cl.exe on
@@ -68,8 +93,8 @@ class EngineRunner(QObject):
         self._root           = project_root
         self._engine_dir     = os.path.join(project_root, "engine_gpu")
         self._engine_cpu_dir = os.path.join(project_root, "engine_omp")
-        self._twm_bin        = os.path.join(self._engine_dir,     "twm")
-        self._twm_cpu_bin    = os.path.join(self._engine_cpu_dir, "twm_cpu")
+        self._twm_bin        = os.path.join(self._engine_dir,     "twm" + EXE_SUFFIX)
+        self._twm_cpu_bin    = os.path.join(self._engine_cpu_dir, "twm_cpu" + EXE_SUFFIX)
         self._backend        = "cuda"
 
         self._last_build: dict = {}   # tracks grid + arch of last successful build
@@ -188,6 +213,8 @@ class EngineRunner(QObject):
             self._proc_make.setNativeArguments(cmd_line)
             self._proc_make.start()
         else:
+            if self._backend == "cpu":
+                self._proc_make.setProcessEnvironment(cpu_engine_env())
             self._proc_make.start(MAKE_CMD, args)
 
     def _on_make_error(self, error):
@@ -235,14 +262,15 @@ class EngineRunner(QObject):
             if os.path.isdir(hdf5_bin):
                 env.insert("PATH", hdf5_bin + os.pathsep + env.value("PATH"))
             self._proc_twm.setProcessEnvironment(env)
-        elif self._backend == "cpu" and self._omp_threads:
-            # OMP_NUM_THREADS overrides the OpenMP runtime default of "all
-            # logical cores"; the CPU engine reads it implicitly via
-            # omp_get_max_threads() — no code change needed on that side.
-            env = QProcessEnvironment.systemEnvironment()
-            env.insert("OMP_NUM_THREADS", str(self._omp_threads))
+        elif self._backend == "cpu":
+            env = cpu_engine_env()
+            if self._omp_threads:
+                # OMP_NUM_THREADS overrides the OpenMP runtime default of "all
+                # logical cores"; the CPU engine reads it implicitly via
+                # omp_get_max_threads() — no code change needed on that side.
+                env.insert("OMP_NUM_THREADS", str(self._omp_threads))
+                self.log_line.emit(f"[INFO] OMP_NUM_THREADS={self._omp_threads}")
             self._proc_twm.setProcessEnvironment(env)
-            self.log_line.emit(f"[INFO] OMP_NUM_THREADS={self._omp_threads}")
         self._proc_twm.readyReadStandardOutput.connect(self._on_twm_stdout)
         self._proc_twm.readyReadStandardError.connect(self._on_twm_stderr)
         self._proc_twm.finished.connect(self._on_twm_done)

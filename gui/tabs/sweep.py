@@ -15,7 +15,9 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject, QTimer
 
 from ..widgets.plot_canvas import PlotCanvas
+from ..widgets.sci_spinbox import SciDoubleSpinBox
 from ..core_py.config_builder import build_config
+from ..core_py.engine_runner import EXE_SUFFIX, MAKE_CMD, mingw_bin_dir
 
 
 # Parameters that can be swept, with their display name, units, and defaults
@@ -125,19 +127,28 @@ class SweepWorker(QObject):
             pass
         return "sm_75"
 
+    def _engine_env(self) -> dict:
+        """Environment for make / the engine; on Windows the CPU engine needs
+        the MinGW bin dir on PATH (toolchain at build time, DLLs at run time)."""
+        env = os.environ.copy()
+        mingw = mingw_bin_dir()
+        if self.backend == "cpu" and mingw:
+            env["PATH"] = mingw + os.pathsep + env.get("PATH", "")
+        return env
+
     def _compile_engine(self, grid: dict) -> str | None:
         """Compile engine binary with correct grid macros. Returns binary path or None.
         Skips recompilation if the binary already exists with the same grid dimensions."""
         if self.backend == "cpu":
             eng_dir = os.path.join(self.project_root, "engine_omp")
-            binary  = os.path.join(eng_dir, "twm_cpu")
+            binary  = os.path.join(eng_dir, "twm_cpu" + EXE_SUFFIX)
             make_args = ["-B", "-C", eng_dir,
                          f"NX={grid['NX']}", f"NY={grid['NY']}",
                          f"NZ={grid['NZ']}", f"NT={grid['NT']}"]
         else:
             eng_dir = os.path.join(self.project_root, "engine_gpu")
-            binary  = os.path.join(eng_dir, "twm")
-            arch    = self._detect_arch()
+            binary  = os.path.join(eng_dir, "twm" + EXE_SUFFIX)
+            arch   = self._detect_arch()
             make_args = ["-B", "-C", eng_dir,
                          f"NX={grid['NX']}", f"NY={grid['NY']}",
                          f"NZ={grid['NZ']}", f"NT={grid['NT']}",
@@ -157,8 +168,9 @@ class SweepWorker(QObject):
 
         try:
             self._proc = subprocess.Popen(
-                ["make"] + make_args,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+                [MAKE_CMD] + make_args,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                env=self._engine_env()
             )
         except OSError as e:
             self.log_line.emit(
@@ -194,7 +206,8 @@ class SweepWorker(QObject):
             self.log_line.emit(f"    [RUN] twm ...")
             self._proc = subprocess.Popen(
                 [self._binary, config_path, out_dir + "/"],
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                env=self._engine_env()
             )
             for line in self._proc.stdout:
                 if not self._running:
@@ -402,8 +415,8 @@ class SweepTab(QWidget):
         gr.setSpacing(6)
 
         gr.addWidget(QLabel("Min"), 0, 0)
-        self.sb_min = QDoubleSpinBox()
-        self.sb_min.setRange(-1e9, 1e9); self.sb_min.setDecimals(5)
+        self.sb_min = SciDoubleSpinBox()
+        self.sb_min.setRange(-1e9, 1e9); self.sb_min.setDecimals(12)
         gr.addWidget(self.sb_min, 0, 1)
 
         self.lbl_min_unit = QLabel("")
@@ -411,8 +424,8 @@ class SweepTab(QWidget):
         gr.addWidget(self.lbl_min_unit, 0, 2)
 
         gr.addWidget(QLabel("Max"), 1, 0)
-        self.sb_max = QDoubleSpinBox()
-        self.sb_max.setRange(-1e9, 1e9); self.sb_max.setDecimals(5)
+        self.sb_max = SciDoubleSpinBox()
+        self.sb_max.setRange(-1e9, 1e9); self.sb_max.setDecimals(12)
         gr.addWidget(self.sb_max, 1, 1)
 
         self.lbl_max_unit = QLabel("")
@@ -457,10 +470,10 @@ class SweepTab(QWidget):
         self.chk_force_dk = QCheckBox("Force Δk value")
         gdk.addWidget(self.chk_force_dk, 0, 0, 1, 2)
         gdk.addWidget(QLabel("Δk (μm⁻¹)"), 1, 0)
-        self.sb_dk_override = QDoubleSpinBox()
+        self.sb_dk_override = SciDoubleSpinBox()
         self.sb_dk_override.setLocale(self.sb_min.locale())
         self.sb_dk_override.setRange(-10.0, 10.0)
-        self.sb_dk_override.setDecimals(6)
+        self.sb_dk_override.setDecimals(12)
         self.sb_dk_override.setValue(0.0)
         self.sb_dk_override.setEnabled(False)
         gdk.addWidget(self.sb_dk_override, 1, 1)

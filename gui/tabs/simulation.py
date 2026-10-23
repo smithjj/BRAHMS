@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QLocale
 from PyQt6.QtGui import QFont
 
+from ..widgets.sci_spinbox import SciDoubleSpinBox
 from ..core_py.crystal_db import get_db
 
 _LOCALE_C = QLocale(QLocale.Language.C)   # always uses '.' as decimal separator
@@ -266,9 +267,9 @@ class SimulationTab(QWidget):
 
         self.chk_force_dk = QCheckBox("Force Δk (μm⁻¹)")
         g.addWidget(self.chk_force_dk, 6, 0)
-        self.sb_dk_forced = QDoubleSpinBox()
+        self.sb_dk_forced = SciDoubleSpinBox()
         self.sb_dk_forced.setLocale(_LOCALE_C)
-        self.sb_dk_forced.setRange(-10.0, 10.0); self.sb_dk_forced.setDecimals(6)
+        self.sb_dk_forced.setRange(-10.0, 10.0); self.sb_dk_forced.setDecimals(12)
         self.sb_dk_forced.setValue(0.0)
         self.sb_dk_forced.setEnabled(False)
         g.addWidget(self.sb_dk_forced, 6, 1)
@@ -497,8 +498,8 @@ class SimulationTab(QWidget):
         self.sb_th_maxiter.setValue(100000)
         gs.addWidget(self.sb_th_maxiter, 0, 1)
         gs.addWidget(QLabel("Tolerance"), 1, 0)
-        self.sb_th_tol = QDoubleSpinBox()
-        self.sb_th_tol.setRange(1e-12, 1); self.sb_th_tol.setDecimals(8)
+        self.sb_th_tol = SciDoubleSpinBox()
+        self.sb_th_tol.setRange(1e-12, 1); self.sb_th_tol.setDecimals(12)
         self.sb_th_tol.setValue(5e-4)
         gs.addWidget(self.sb_th_tol, 1, 1)
         gs.addWidget(QLabel("h conv (W/m²K)"), 2, 0)

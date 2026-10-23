@@ -8,6 +8,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject
 from PyQt6.QtGui import QFont
 
 from ..widgets.plot_canvas import PlotCanvas
+from ..widgets.sci_spinbox import SciDoubleSpinBox
 from ..core_py.crystal_db import get_db
 from ..core_py.sellmeier  import SellmeierFormula
 from ..core_py.bibtex_utils import bibtex_to_citation
@@ -472,8 +473,8 @@ class CrystalsTab(QWidget):
         g.setSpacing(4)
         g.setContentsMargins(12, 8, 12, 8)
 
-        def _sb(lo=0, hi=1e6, dec=5, val=0.0):
-            sb = QDoubleSpinBox()
+        def _sb(lo=0, hi=1e6, dec=5, val=0.0, sci=False):
+            sb = SciDoubleSpinBox() if sci else QDoubleSpinBox()
             sb.setRange(lo, hi); sb.setDecimals(dec); sb.setValue(val)
             sb.setFixedHeight(24)
             sb.setMaximumWidth(120)
@@ -486,12 +487,12 @@ class CrystalsTab(QWidget):
             ("λ min (μm)",           "sb_lmin",    _sb(0.01, 100, 3, 0.4)),
             ("λ max (μm)",           "sb_lmax",    _sb(0.01, 100, 3, 5.0)),
             ("deff (pm/V)",          "sb_deff",    _sb(0, 1e4, 3, 25.0)),
-            ("α pump (cm⁻¹)",        "sb_alpha_p", _sb(0, 1e6, 6, 0.002)),
-            ("α signal (cm⁻¹)",      "sb_alpha_s", _sb(0, 1e6, 6, 0.025)),
-            ("α idler (cm⁻¹)",       "sb_alpha_i", _sb(0, 1e6, 6, 0.025)),
-            ("β pump (μm/W)",        "sb_beta_p",  _sb(0, 1, 8, 0.0)),
-            ("β signal (μm/W)",      "sb_beta_s",  _sb(0, 1, 8, 5e-5)),
-            ("β idler (μm/W)",       "sb_beta_i",  _sb(0, 1, 8, 0.0)),
+            ("α pump (cm⁻¹)",        "sb_alpha_p", _sb(0, 1e6, 12, 0.002, sci=True)),
+            ("α signal (cm⁻¹)",      "sb_alpha_s", _sb(0, 1e6, 12, 0.025, sci=True)),
+            ("α idler (cm⁻¹)",       "sb_alpha_i", _sb(0, 1e6, 12, 0.025, sci=True)),
+            ("β pump (μm/W)",        "sb_beta_p",  _sb(0, 1, 12, 0.0, sci=True)),
+            ("β signal (μm/W)",      "sb_beta_s",  _sb(0, 1, 12, 5e-5, sci=True)),
+            ("β idler (μm/W)",       "sb_beta_i",  _sb(0, 1, 12, 0.0, sci=True)),
             ("ρ_p (rad)",            "sb_rho_p",   _sb(-1.5708, 1.5708, 6, 0.0)),
             ("ρ_s (rad)",            "sb_rho_s",   _sb(-1.5708, 1.5708, 6, 0.0)),
             ("ρ_i (rad)",            "sb_rho_i",   _sb(-1.5708, 1.5708, 6, 0.0)),

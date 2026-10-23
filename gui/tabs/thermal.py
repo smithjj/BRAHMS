@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 
 from ..widgets.plot_canvas import PlotCanvas
+from ..widgets.sci_spinbox import SciDoubleSpinBox
 
 
 class ThermalTab(QWidget):
@@ -82,8 +83,8 @@ class ThermalTab(QWidget):
             ("α (cm⁻¹) signal", "sb_as",    0.025e-4 * 1e4),
         ]):
             g3.addWidget(QLabel(lbl), row, 0)
-            sb = QDoubleSpinBox()
-            sb.setRange(0, 1e6); sb.setDecimals(6); sb.setValue(val)
+            sb = SciDoubleSpinBox()
+            sb.setRange(0, 1e6); sb.setDecimals(12); sb.setValue(val)
             setattr(self, attr, sb)
             g3.addWidget(sb, row, 1)
         lv.addWidget(gb_mat)
@@ -98,8 +99,8 @@ class ThermalTab(QWidget):
         self.sb_maxiter.setValue(100000)
         g4.addWidget(self.sb_maxiter, 0, 1)
         g4.addWidget(QLabel("Tolerance"), 1, 0)
-        self.sb_tol = QDoubleSpinBox()
-        self.sb_tol.setRange(1e-12, 1); self.sb_tol.setDecimals(8)
+        self.sb_tol = SciDoubleSpinBox()
+        self.sb_tol.setRange(1e-12, 1); self.sb_tol.setDecimals(12)
         self.sb_tol.setValue(5e-4)
         g4.addWidget(self.sb_tol, 1, 1)
         lv.addWidget(gb_sol)
